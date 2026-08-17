@@ -1,0 +1,15 @@
+load(".aspect/helpers.axl", "run_steps")
+
+def _impl(ctx: TaskContext) -> int:
+    root = ctx.std.env.aspect_root_dir()
+    return run_steps(ctx, [
+        (["run", "//tools/testreport:run_lint_report", "--", "--output=.test-report/linters"], root),
+        (["test", "--bazel-flag=--test_strategy=standalone", "--bazel-flag=--nocache_test_results", "//:sdk_test", "//:module_examples_test", "//:modules_test", "//:docs_test"], root),
+        (["run", "//tools/testreport:render_report", "--", "--output=.test-report/evidence", "--scan-testlogs=bazel-testlogs", "--lint-report=.test-report/linters/report.json"], root),
+        (["run", "//docs/tools/docs:stage_site_with_report"], root),
+    ])
+
+hovel_report = task(
+    summary = "Generate test evidence and materialize the evidence-backed documentation site.",
+    implementation = _impl,
+)

@@ -66,20 +66,20 @@ dispatcher. Use the root wrappers so local development and CI exercise the
 same hermetic toolchains and dependency graph.
 
 ```sh
-task sdk:fmt
-task sdk:lint
-task sdk:test
-task sdk:build
-task sdk:ci
+aspect hovel-check sdk
+aspect hovel-check sdk
+aspect hovel-check sdk
+aspect hovel-check sdk
+aspect hovel-check sdk
 ```
 
-Use <code>task sdk:test</code> for behavior changes, <code>task sdk:build</code>
-for a compile-only pass, and <code>task sdk:ci</code> as the complete SDK gate.
-<code>task check</code> remains the checkout-aware repository gate.
+Use <code>aspect hovel-check sdk</code> for behavior changes, <code>aspect hovel-check sdk</code>
+for a compile-only pass, and <code>aspect hovel-check sdk</code> as the complete SDK gate.
+<code>aspect hovel-check</code> remains the checkout-aware repository gate.
 
 Example modules live under `modules/examples/`. Use
-<code>task modules:examples:ci</code> for their build-and-test gate and
-<code>task modules:ci</code> for the complete module slice, including package
+<code>aspect hovel-check modules</code> for their build-and-test gate and
+<code>aspect hovel-check modules</code> for the complete module slice, including package
 tests and Picblobs.
 
 Install or link a module package before running it:

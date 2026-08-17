@@ -23,7 +23,7 @@
       selectFromHash();
     })
     .catch(() => {
-      app.innerHTML = `<p class="empty-state">No generated test evidence is attached to this site build. Run <code>task docs:report</code> to create it.</p>`;
+      app.innerHTML = `<p class="empty-state">No generated test evidence is attached to this site build. Run <code>aspect hovel-report</code> to create it.</p>`;
     });
 
   function renderMetadata(report) {
@@ -183,7 +183,7 @@
   function renderLinters(report) {
     const linters = report.linters || [];
     if (!linters.length) {
-      return `<p class="empty-state">No linter evidence was attached to this report. Run <code>task lint:report</code> to create it.</p>`;
+      return `<p class="empty-state">No linter evidence was attached to this report. Run <code>aspect hovel-report</code> to create it.</p>`;
     }
     const passed = linters.filter((tool) => tool.status === "PASSED").length;
     const failed = linters.filter((tool) => tool.status === "FAILED").length;
@@ -194,7 +194,7 @@
           <div>
             <span class="panel-kicker">Source quality evidence</span>
             <h2>Linters and static analysis</h2>
-            <p>Every wired tool, its detected source-level ignore statements, and complete Task-backed output.</p>
+            <p>Every wired tool, its detected source-level ignore statements, and complete Aspect-backed output.</p>
           </div>
           <span class="result-count">${linters.length} tools</span>
         </div>
@@ -224,7 +224,7 @@
         </summary>
         <div class="linter-body">
           <div class="linter-commands">
-            <h3>Task-backed invocation</h3>
+            <h3>Aspect-backed invocation</h3>
             ${commands.map((command) => `<code>${escapeHtml(command)}</code>`).join("")}
           </div>
           ${renderLinterIgnores(ignores)}
@@ -486,7 +486,7 @@
         ${statusBadge(target.status)}
       </div>
       <p class="detail-meta">${escapeHtml(target.suite)} · ${escapeHtml(target.language)} · attempt ${target.attempts} · run ${target.run} · shard ${target.shard}</p>
-      <p><code>task test -- ${escapeHtml(target.label)}</code></p>
+      <p><code>aspect test ${escapeHtml(target.label)}</code></p>
       <div class="tabs" role="tablist" aria-label="Target evidence">
         ${detailTab("log", "Log")}
         ${detailTab("cases", `Cases (${target.cases.length})`)}

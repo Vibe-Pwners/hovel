@@ -31,12 +31,12 @@ the payload configures that same group set. Mesh only routes the encrypted bytes
 The stamp operation rejects callback and named-pipe artifacts; the validated
 TLS server role currently belongs to configured TCP-bind payloads.
 
-The integration contract is exercised through Task:
+The integration contract is exercised through Aspect CLI:
 
-- `task modules:squatter:coverage` runs the aggregate Squatter Go suites and
+- `aspect hovel-check modules` runs the aggregate Squatter Go suites and
   enforces the 90% line-coverage floor (currently 90.59%).
-- `task modules:wine-test` runs both x86 and x64 host-Wine test transitions.
-- `task modules:wine-docker-test` builds the concrete 32-bit and 64-bit payloads
+- `aspect hovel-check modules` runs both x86 and x64 host-Wine test transitions.
+- `aspect hovel-check modules` builds the concrete 32-bit and 64-bit payloads
   and runs the real Go functional harness against each one in isolated Wine
   prefixes inside Docker.
 - Provider tests create two live TCP-bind endpoints, select one by its Mesh

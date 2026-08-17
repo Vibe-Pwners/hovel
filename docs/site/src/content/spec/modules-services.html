@@ -23,9 +23,9 @@
           The in-tree examples are deliberately benign and exercise the orchestration
           surface: survey, exploit, and session modules exist in Python, Go, and Rust.
           These examples and Squatter now live in the <code>modules/</code> slice.
-          Use <code>task modules:examples:ci</code> for the examples,
-          <code>task modules:ci</code> for the complete slice, and
-          <code>task release:modules-package</code> for installable archives and indexes.
+          Use <code>aspect hovel-check modules</code> for the examples,
+          <code>aspect hovel-check modules</code> for the complete slice, and
+          <code>aspect hovel-release modules</code> for installable archives and indexes.
           These are separate from the core-only gate but compose into full-checkout CI.
           Python examples can be linked during development or packaged with a managed
           Python launcher.

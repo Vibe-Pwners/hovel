@@ -26,20 +26,18 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
           restore-keys: bazel-slices-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
-      - run: task checkout:status
-      - run: task repo:quality
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
+      - run: python3 repo-tools/tasks/checkout.py status
+      - run: aspect hovel-check repo
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- repo-quality
+        run: python3 core/tools/ci/job_summary.py repo-quality
 
   core:
     name: Core fmt, lint, build, test
@@ -53,17 +51,15 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-repository-${{ runner.os }}-${{ hashFiles('core/MODULE.bazel.lock', 'core/.bazelversion') }}
           restore-keys: bazel-repository-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
-      - run: task checkout:status
-      - run: task core:ci
-      - run: task release:hovel-wheels
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
+      - run: python3 repo-tools/tasks/checkout.py status
+      - run: aspect hovel-check core
+      - run: aspect hovel-release hovel
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -73,7 +69,7 @@ jobs:
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- ci-build-test
+        run: python3 core/tools/ci/job_summary.py ci-build-test
 
   sdk:
     name: SDK build and test
@@ -87,19 +83,17 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
           restore-keys: bazel-slices-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
-      - run: task sdk:ci
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
+      - run: aspect hovel-check sdk
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- sdk-ci
+        run: python3 core/tools/ci/job_summary.py sdk-ci
 
   modules:
     name: Modules build and test
@@ -113,16 +107,14 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
           restore-keys: bazel-slices-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
-      - run: task modules:ci
-      - run: task release:modules-package
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
+      - run: aspect hovel-check modules
+      - run: aspect hovel-release modules
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: module-packages
@@ -131,7 +123,7 @@ jobs:
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- modules-ci
+        run: python3 core/tools/ci/job_summary.py modules-ci
 
   docs:
     name: Docs, test report, and Pages artifact
@@ -145,16 +137,14 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
           restore-keys: bazel-slices-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - name: Build evidence-backed Pages site
-        run: task docs:report
+        run: aspect hovel-report
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docs-site
@@ -164,7 +154,7 @@ jobs:
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- docs-ci
+        run: python3 core/tools/ci/job_summary.py docs-ci
 
   squatter-wine:
     name: Squatter Wine tests and demo
@@ -178,23 +168,21 @@ jobs:
             ~/.cache/bazel-repository
           key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
           restore-keys: bazel-slices-${{ runner.os }}-
-      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.52.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Aspect CLI
+        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
       - name: Configure Bazel cache
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: task actions:configure-bazel-cache
+        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - name: Install demo host tools
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y --install-recommends wine32 wine64
-      - run: task modules:wine-test
-      - run: task modules:wine-docker-test
-      - run: task docs:demos:wine
+      - run: aspect test --bazel-flag=--platforms=//platforms:windows_x86 --bazel-flag=--extra_toolchains=@mingw_i686//:toolchain --bazel-flag=--run_under=//tools/wine:wine_run //:modules_wine_test && aspect test --bazel-flag=--platforms=//platforms:windows_x64 --bazel-flag=--extra_toolchains=@mingw_x86_64//:toolchain --bazel-flag=--run_under=//tools/wine:wine_run //:modules_wine_test
+      - run: aspect run //modules/docker/squatter-wine:functional_test -- --evidence-log=.test-report/jobs/squatter-wine-e2e.log --job-summary=.test-report/jobs/squatter-wine-e2e.json
+      - run: aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs
       - if: always()
         env:
           JOB_STATUS: ${{ job.status }}
-        run: task actions:summary -- squatter-wine
+        run: python3 core/tools/ci/job_summary.py squatter-wine

@@ -290,7 +290,7 @@ func (p *Provider) readArtifact(payload payloadDef) ([]byte, string, blobMetadat
 	path := filepath.Join(root, "python", "picblobs", "blobs", name)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, path, blobMetadata{}, fmt.Errorf("picblobs artifact %s is not staged; run task picblobs:stage: %w", name, err)
+		return nil, path, blobMetadata{}, fmt.Errorf("picblobs artifact %s is not staged; run aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --: %w", name, err)
 	}
 	meta := blobMetadata{}
 	metaPath := strings.TrimSuffix(path, ".bin") + ".json"

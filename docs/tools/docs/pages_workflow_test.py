@@ -30,7 +30,7 @@ class PagesWorkflowTest(unittest.TestCase):
 
     def test_ci_artifact_contains_the_final_report_site(self) -> None:
         docs_job = position(CI_WORKFLOW, "  docs:\n")
-        report = position(CI_WORKFLOW, "run: task docs:report", docs_job)
+        report = position(CI_WORKFLOW, "run: aspect hovel-report", docs_job)
         upload = position(CI_WORKFLOW, "uses: actions/upload-artifact@", report)
 
         self.assertLess(docs_job, report)
@@ -62,11 +62,11 @@ class PagesWorkflowTest(unittest.TestCase):
         self.assertIn("uses: actions/deploy-pages@", PAGES_WORKFLOW)
 
     def test_manual_dispatch_builds_the_same_report_site(self) -> None:
-        report = position(PAGES_WORKFLOW, "run: task docs:report")
+        report = position(PAGES_WORKFLOW, "run: aspect hovel-report")
         preceding_step = PAGES_WORKFLOW[max(0, report - 180) : report]
         self.assertIn("if: github.event_name == 'workflow_dispatch'", preceding_step)
-        self.assertNotIn("run: task docs:site", PAGES_WORKFLOW)
-        self.assertNotIn("run: task docs:build", PAGES_WORKFLOW)
+        self.assertNotIn("run: aspect run //docs/tools/docs:stage_site", PAGES_WORKFLOW)
+        self.assertNotIn("run: aspect run //docs/tools/docs:stage_site", PAGES_WORKFLOW)
 
 
 if __name__ == "__main__":

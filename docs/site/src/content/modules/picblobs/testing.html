@@ -3,40 +3,40 @@
         <h1>Testing picblobs</h1>
         <p>
           The original Bazel, Python, CLI, payload, and generated-file tests are
-          available through root Task targets so they run inside the Hovel build.
+          available through root Aspect commands so they run inside the Hovel build.
         </p>
 
         <h2>Primary Checks</h2>
-        <pre><code>task picblobs:generate-check
-task picblobs:test
-task picblobs:ci</code></pre>
+        <pre><code>aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:generate_check
+aspect hovel-check modules
+aspect hovel-check modules</code></pre>
         <p>
           <code>picblobs:test</code> runs the Bazel-integrated test suite;
           <code>picblobs:ci</code> adds representative cross-platform builds.
           Keep Bazel options after <code>--</code> when extra diagnostics are
           needed, for example
-          <code>task picblobs:test -- --test_output=errors</code>.
+          <code>aspect hovel-check modules -- --test_output=errors</code>.
         </p>
 
         <h2>Payload Checks</h2>
         <p>
           Payload tests require staged blobs and runners. Run
-          <code>task picblobs:stage</code> first for the full matrix, or pass
+          <code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --</code> first for the full matrix, or pass
           <code>--targets</code> and <code>--configs</code> to stage a focused
           subset during local iteration.
         </p>
 
         <h2 id="mbed-testing">Mbed/NaCl Checks</h2>
-        <p>Use these Task-backed commands for focused developer iteration:</p>
-        <pre><code>task bazel:test -- \
+        <p>Use these Aspect-backed commands for focused developer iteration:</p>
+        <pre><code>aspect test \
   --config=picblobs_ci \
   //modules/picblobs/tests:nacl_e2e_mbed
 
-task bazel:test -- \
+aspect test \
   --config=picblobs_ci \
   //modules/picblobs/mbed:target_compile_test
 
-task bazel:test -- \
+aspect test \
   --config=picblobs_ci \
   //modules/picblobs/mbed:compile_mbed_os_test \
   //modules/picblobs/mbed:materialize_blobs_test</code></pre>

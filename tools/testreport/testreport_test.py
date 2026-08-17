@@ -29,7 +29,7 @@ class TestReportTest(unittest.TestCase):
                                 "scope": "Python",
                                 "status": "PASSED",
                                 "duration": 0.25,
-                                "commands": ["task sdk:lint"],
+                                "commands": ["aspect hovel-check sdk"],
                                 "ignore_statements": [
                                     {"path": "sdk/example.py", "line": 7, "text": "value = 1  # noqa: S101"}
                                 ],

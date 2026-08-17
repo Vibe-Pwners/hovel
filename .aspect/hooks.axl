@@ -1,0 +1,9 @@
+def _impl(ctx: TaskContext) -> int:
+    command = ctx.std.process.command("lefthook").arg("install")
+    command = command.current_dir(ctx.std.env.aspect_root_dir())
+    return command.spawn().wait().code or 0
+
+hovel_hooks = task(
+    summary = "Install or refresh the repository Git hooks.",
+    implementation = _impl,
+)

@@ -173,7 +173,7 @@ hovel module uninstall squatter@{{HOVEL_VERSION}}
         <p>Installing the same <code>name@version</code> with a different SHA-256 fails unless <code>--replace</code> is supplied. Bulk install accepts local manifest files or HTTPS manifest URLs. Relative sources in a downloaded manifest resolve against the manifest URL. Bulk install runs in order, stops on the first failure, and does not roll back earlier successful installs.</p>
 
         <h2>Indexes And Bulk Manifests</h2>
-        <p>Hovel has no default internet index. An operator may configure or pass an index explicitly. Source-tree development can discover local module indexes when <code>HOVEL_MODULE_CONFIG</code> points at an in-repo or private module catalog. In-tree module release packages and indexes are generated with <code>task release:modules-package</code>, which stages declared module binaries into <code>modules/examples/bin/</code> and writes packages, <code>module-index.yaml</code>, <code>module-install-set.yaml</code>, and <code>SHA256SUMS</code> under <code>dist/modules/</code>. Cached HTTPS indexes are available offline after the first explicit fetch.</p>
+        <p>Hovel has no default internet index. An operator may configure or pass an index explicitly. Source-tree development can discover local module indexes when <code>HOVEL_MODULE_CONFIG</code> points at an in-repo or private module catalog. In-tree module release packages and indexes are generated with <code>aspect hovel-release modules</code>, which stages declared module binaries into <code>modules/examples/bin/</code> and writes packages, <code>module-index.yaml</code>, <code>module-install-set.yaml</code>, and <code>SHA256SUMS</code> under <code>dist/modules/</code>. Cached HTTPS indexes are available offline after the first explicit fetch.</p>
 <pre data-lang="yaml"><code>apiVersion: hovel.dev/v1alpha1
 kind: ModuleIndex
 modules:
@@ -216,8 +216,8 @@ modules:
 
         <h2>Build Strategy</h2>
         <p>Hovel is a monorepo because in-tree modules, services, SDKs, schemas, CLI, TUI, API, and MCP adapters evolve together.</p>
-        <p><code>Taskfile.yml</code> is the authoritative build, test, lint, docs, run, and release entry point. The tasks may call Bazel or other tools internally, but contributors, CI, hooks, docs, and automation use <code>task &lt;name&gt;</code> rather than invoking Bazel, gofmt, uv, or lefthook directly.</p>
-        <p>Task/Bazel responsibilities:</p>
+        <p><code>.aspect/</code> is the authoritative build, test, lint, docs, run, and release command configuration. Contributors, CI, hooks, docs, and automation invoke the build through <code>aspect</code>.</p>
+        <p>Aspect/Bazel responsibilities:</p>
         <ol>
           <li>Build and test all Go packages and binaries.</li>
           <li>Build and test the Python SDK.</li>
@@ -227,14 +227,14 @@ modules:
           <li>Own generated schemas and contract-test outputs.</li>
           <li>Produce release archives, PyPI wheels, and module packages.</li>
         </ol>
-        <p>The current repository contract is, with <a href="https://taskfile.dev/">Task</a> as the single entry point:</p>
-<pre data-lang="bash"><code>task build
-task test
-task fmt     # wired formatters: core Go/Gazelle plus Go SDK
-task check   # checks available in this checkout
-task ci      # full-checkout guard plus core, SDK, modules, and docs gates
+        <p>The current repository contract uses <a href="https://aspect.build/docs/cli/">Aspect CLI</a> as the single entry point:</p>
+<pre data-lang="bash"><code>aspect build
+aspect test
+aspect hovel-format     # wired formatters: core Go/Gazelle plus Go SDK
+aspect hovel-check   # checks available in this checkout
+aspect hovel-check      # full-checkout guard plus core, SDK, modules, and docs gates
 </code></pre>
-        <p><code>Taskfile.yml</code> is the one correct way to build, test, lint, format, and run; contributors, CI, and tooling never invoke Bazel, gofmt, uv, or lefthook directly. The root task file is a sparse-checkout tolerant dispatcher. Core work delegates into the self-contained <code>core/</code> workspace; SDK, module, and docs checks use the root integration workspace so a full checkout can validate demos, module packages, SDKs, and documentation without making those trees part of <code>core/</code>.</p>
+        <p><code>aspect</code> is the supported way to build, test, lint, format, and run. The root command configuration is sparse-checkout tolerant. Core work uses the self-contained <code>core/</code> workspace; SDK, module, and docs checks use the root integration workspace so a full checkout can validate demos, module packages, SDKs, and documentation without making those trees part of <code>core/</code>.</p>
 
         <h2>Distribution</h2>
         <p>The released Go mono-binary is still available directly from GitHub Releases:</p>

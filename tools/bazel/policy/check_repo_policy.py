@@ -14,7 +14,7 @@ EXCLUDED_PARTS = {
     ".git",
     ".local",
     ".sl",
-    ".task",
+    ".aspect-cache",
     "__pycache__",
     "_site",
     "bazel-bin",
@@ -29,8 +29,14 @@ HOST_ACTION_ALLOWLIST = {
     # Manual QEMU tests manage host networking and nested VM processes.
     Path("modules/picblobs/kernel/BUILD.bazel"): {'"no-sandbox"'},
 }
-REMOTE_COMPATIBLE_TASKS = ("ci", "docs:check", "docs:build", "docs:site", "docs:ci")
-REMOTE_TASK_FORBIDDEN_DOCS = re.compile(r"\bdocs:demos(?::[A-Za-z0-9:_-]+)?\b")
+REMOTE_CHECK_FILE = Path(".aspect/check.axl")
+REMOTE_CHECK_FORBIDDEN_TARGETS = ("materialize_docs_demo_outputs", "materialize_squatter_wine_demo_outputs")
+HERMETIC_CC_VERSION = 'bazel_dep(name = "hermetic_cc_toolchain", version = "4.3.0")'
+HERMETIC_CC_TOOLCHAINS = (
+    '"@zig_sdk//toolchain:linux_amd64_gnu.2.28"',
+    '"@zig_sdk//toolchain:linux_arm64_gnu.2.28"',
+)
+LOCAL_CC_DETECTION_DISABLED = "build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1"
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,7 @@ def main() -> int:
 
 def check_hermeticity(repo: Path) -> list[Violation]:
     violations: list[Violation] = []
+    violations.extend(check_hermetic_cc_toolchain(repo))
     for path in starlark_files(repo):
         rel = path.relative_to(repo)
         allowed = HOST_ACTION_ALLOWLIST.get(rel, set())
@@ -77,20 +84,37 @@ def check_hermeticity(repo: Path) -> list[Violation]:
                 if setting in text and setting not in allowed:
                     violations.append(Violation(path, f"non-hermetic Bazel setting {setting!r} is not allowlisted", line))
 
-    taskfile = repo / "Taskfile.yml"
-    if not taskfile.is_file():
+    check_file = repo / REMOTE_CHECK_FILE
+    if not check_file.is_file():
         return violations
-    taskfile_text = taskfile.read_text(encoding="utf-8")
-    for task_name in REMOTE_COMPATIBLE_TASKS:
-        body, body_offset = task_block(taskfile_text, task_name)
-        for match in REMOTE_TASK_FORBIDDEN_DOCS.finditer(body):
+    check_text = check_file.read_text(encoding="utf-8")
+    for target in REMOTE_CHECK_FORBIDDEN_TARGETS:
+        for match in re.finditer(re.escape(target), check_text):
             violations.append(
                 Violation(
-                    taskfile,
-                    f"remote-compatible task {task_name!r} invokes host-service task {match.group(0)!r}",
-                    line_number(taskfile_text, body_offset + match.start()),
+                    check_file,
+                    f"remote-compatible Aspect gate invokes host-service target {target!r}",
+                    line_number(check_text, match.start()),
                 )
             )
+    return violations
+
+
+def check_hermetic_cc_toolchain(repo: Path) -> list[Violation]:
+    violations: list[Violation] = []
+    for workspace in (repo, repo / "core"):
+        module = workspace / "MODULE.bazel"
+        bazelrc = workspace / ".bazelrc"
+        if not module.is_file() or not bazelrc.is_file():
+            continue
+        module_text = module.read_text(encoding="utf-8")
+        bazelrc_text = bazelrc.read_text(encoding="utf-8")
+        required_module_fragments = (HERMETIC_CC_VERSION, *HERMETIC_CC_TOOLCHAINS)
+        for fragment in required_module_fragments:
+            if fragment not in module_text:
+                violations.append(Violation(module, f"missing hermetic C/C++ toolchain configuration {fragment!r}"))
+        if LOCAL_CC_DETECTION_DISABLED not in bazelrc_text:
+            violations.append(Violation(bazelrc, "local C/C++ toolchain auto-detection must be disabled"))
     return violations
 
 
@@ -185,16 +209,6 @@ def starlark_files(repo: Path) -> list[Path]:
     )
 
 
-def task_block(text: str, task_name: str) -> tuple[str, int]:
-    match = re.search(rf"(?m)^  {re.escape(task_name)}:\s*$", text)
-    if match is None:
-        return "", 0
-    start = match.end()
-    next_task = re.search(r"(?m)^  [A-Za-z0-9:_-]+:\s*$", text[start:])
-    end = start + next_task.start() if next_task else len(text)
-    return text[start:end], start
-
-
 def line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, max(offset, 0)) + 1
 
@@ -243,7 +257,7 @@ def find_repo_root() -> Path:
             return candidate
     for root in candidate_roots():
         candidate = root.resolve()
-        if (candidate / "MODULE.bazel").is_file() and (candidate / "Taskfile.yml").is_file():
+        if (candidate / "MODULE.bazel").is_file() and (candidate / ".aspect").is_dir():
             return candidate
     raise SystemExit("unable to locate repository root")
 

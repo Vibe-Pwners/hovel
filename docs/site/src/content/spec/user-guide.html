@@ -99,16 +99,16 @@ modules:
         </figure>
 
         <h2>Start Hovel From Source</h2>
-        <p>All build, test, run, and docs commands go through Task. The developer workspace defaults to <code>./.hovel</code>; set <code>HOVEL_WORKSPACE</code> when you want a separate local workspace.</p>
+        <p>All build, test, run, and docs commands go through Aspect CLI. The developer workspace defaults to <code>./.hovel</code>; set <code>HOVEL_WORKSPACE</code> when you want a separate local workspace.</p>
 <pre data-lang="shell"><code># Build staged example modules and launch the interactive CLI.
-task start
+aspect hovel cli
 
 # Inspect daemon state for the current dev workspace.
-task status
+aspect hovel status
 
 # Wipe local state and relaunch from a clean workspace.
-task reset</code></pre>
-        <p><code>task start</code> launches <code>hovel cli</code> and auto-starts or attaches to a local daemon for the workspace. The daemon owns module processes, throw plans, confirmation records, artifacts, installed payload inventory, logs, and sessions.</p>
+aspect hovel init</code></pre>
+        <p><code>aspect hovel cli</code> launches <code>hovel cli</code> and auto-starts or attaches to a local daemon for the workspace. The daemon owns module processes, throw plans, confirmation records, artifacts, installed payload inventory, logs, and sessions.</p>
 
         <div class="demo-series">
           <figure class="demo-figure">
@@ -123,7 +123,7 @@ task reset</code></pre>
 
         <h2>Throw A Saved Chain</h2>
         <p>One-shot mode is for scripts, CI, demos, and operators who want to execute a durable configured chain file without entering the prompt. It loads the chain file, creates the same review surface as interactive execution, records a confirmation, runs the modules, persists events, and exits.</p>
-<pre data-lang="shell"><code>task run -- //cmd/hovel -- throw demo/chains/mock-survey-exploit.chain.yaml --now</code></pre>
+<pre data-lang="shell"><code>aspect hovel throw -- demo/chains/mock-survey-exploit.chain.yaml --now</code></pre>
         <p><code>--now</code> skips the typed <code>yes</code> prompt, but it is still an explicit recorded confirmation bypass. It does not skip planning, validation, guardrails, event recording, artifacts, or throw records.</p>
 
         <div class="demo-series">

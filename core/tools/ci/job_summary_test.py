@@ -39,7 +39,7 @@ class JobSummaryTest(unittest.TestCase):
         rendered = job_summary.render_summary(job_summary.JOBS["repo-quality"])
 
         self.assertIn("## CI Repository Quality Gate", rendered)
-        self.assertIn("`task repo:quality`", rendered)
+        self.assertIn("`aspect hovel-check repo`", rendered)
         self.assertIn("hermeticity", rendered)
 
     def test_build_summary_embeds_coverage_ratchets(self) -> None:
@@ -55,7 +55,7 @@ class JobSummaryTest(unittest.TestCase):
                 rendered = job_summary.render_summary(job_summary.JOBS["ci-build-test"])
 
         self.assertIn("## CI Core Gate", rendered)
-        self.assertIn("`task core:ci`", rendered)
+        self.assertIn("`aspect hovel-check core`", rendered)
         self.assertIn("### Coverage Ratchets", rendered)
         self.assertIn("| domain | pass |", rendered)
 
@@ -71,7 +71,7 @@ class JobSummaryTest(unittest.TestCase):
                 rendered = job_summary.render_summary(job_summary.JOBS["publish-hovel-build"])
 
         self.assertIn("## Publish Hovel Wheels", rendered)
-        self.assertIn("`task release:hovel-wheels`", rendered)
+        self.assertIn("`aspect hovel-release hovel`", rendered)
         self.assertIn("`core/dist/hovel-0.1.0-py3-none-any.whl`", rendered)
 
     def test_pages_summary_reports_site_stats(self) -> None:
@@ -88,7 +88,7 @@ class JobSummaryTest(unittest.TestCase):
         self.assertIn("| HTML pages | 1 |", rendered)
         self.assertIn("| Total size | 16 B |", rendered)
         self.assertIn("`actions/download-artifact docs-site`", rendered)
-        self.assertIn("`task docs:report (manual dispatch only)`", rendered)
+        self.assertIn("`aspect hovel-report (manual dispatch only)`", rendered)
 
     def test_main_appends_to_github_step_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,7 +105,7 @@ class JobSummaryTest(unittest.TestCase):
 
         self.assertIn("## CI Core Gate", written)
         self.assertIn("| Status | failure |", written)
-        self.assertIn("`task core:ci`", written)
+        self.assertIn("`aspect hovel-check core`", written)
 
 
 if __name__ == "__main__":

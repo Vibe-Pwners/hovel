@@ -221,7 +221,7 @@ summary listing the failing combinations by name.</p>
 <h2 id="typical-workflows">Typical workflows</h2>
 <h3 id="iterating-on-a-payload-during-development">Iterating on a payload during development</h3>
 <pre data-lang="bash"><code># Edit src/payload/my_blob.c, then
-task stage
+aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs
 
 # Single-shot run
 picblobs-cli run my_blob linux:x86_64

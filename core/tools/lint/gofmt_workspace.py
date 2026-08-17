@@ -39,7 +39,7 @@ def main() -> int:
     unformatted = result.stdout.strip()
     if unformatted:
         print(f"gofmt found files that need formatting:\n{unformatted}", file=sys.stderr)
-        print("Run task fmt before committing.", file=sys.stderr)
+        print("Run aspect hovel-format before committing.", file=sys.stderr)
         return 1
     return 0
 

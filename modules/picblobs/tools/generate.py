@@ -1282,7 +1282,7 @@ def _require_formatters() -> bool:
     print(
         f"error: required formatter(s) not found on PATH: {', '.join(missing)}\n"
         "Generated Bazel/C files are buildifier/clang-format formatted; without\n"
-        "them this check is inaccurate. Install them (e.g. run `task setup`).",
+        "them this check is inaccurate. Use the Bazel-managed Aspect targets.",
         file=sys.stderr,
     )
     return False

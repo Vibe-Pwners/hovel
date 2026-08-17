@@ -94,12 +94,12 @@ jobs:
           PY
 
       - name: Stage release blobs
-        run: task stage:release
+        run: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs_release
 
       - name: Build picblobs distributions
         env:
           EXPECTED_VERSION: ${{ steps.version.outputs.expected }}
-        run: task dist:picblobs EXPECTED_VERSION="${EXPECTED_VERSION}"
+        run: aspect hovel-release picblobs -- --expected-version="${EXPECTED_VERSION}"
 
       - name: Smoke-install the built wheel
         env:

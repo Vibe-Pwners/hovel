@@ -1238,8 +1238,8 @@ where applicable. Do not build the wizard first.
 - backend descriptors, SDK dispatch, manifest schemas, and daemon capability
   validation stay contract-aligned;
 - five fast non-visual demo scenarios pass before VHS rendering;
-- `task ci` passes for remote-compatible checks;
-- `task docs:site` passes separately on a host with required services.
+- `aspect hovel-check` passes for remote-compatible checks;
+- `aspect run //docs/tools/docs:stage_site` passes separately on a host with required services.
 
 ## Completion evidence
 

@@ -61,15 +61,15 @@ ordered slide data lives in `src/pages/index.astro`.
 
 | Command | Purpose |
 | --- | --- |
-| `task docs:check` | Test, assemble, and link-check the complete remote-compatible site. |
-| `task docs:build` | Build the declared site from checked-in assets and materialize `_site/`. |
-| `task docs:demos` | Host-only: regenerate standard/UI demos and refresh checked-in GIFs. |
-| `task docs:demos:wine` | Host-only: regenerate and refresh the Squatter Wine GIF. |
-| `task docs:demos:all` | Host-only: regenerate and refresh every checked-in demo GIF. |
-| `task docs:dev` | Run Astro through Bazel on `http://localhost:4321`. |
-| `task docs:preview` | Serve the assembled `_site/` on `http://localhost:4322`. |
-| `task docs:report` | Run report-producing tests and build `_site/` with their evidence. |
-| `task docs:deps` | Refresh the pnpm and hashed Sphinx locks with Bazel-managed tools. |
+| `aspect hovel-check docs` | Test, assemble, and link-check the complete remote-compatible site. |
+| `aspect run //docs/tools/docs:stage_site` | Build the declared site from checked-in assets and materialize `_site/`. |
+| `aspect run //docs/tools/demo:materialize_docs_demo_outputs` | Host-only: regenerate standard/UI demos and refresh checked-in GIFs. |
+| `aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs` | Host-only: regenerate and refresh the Squatter Wine GIF. |
+| `aspect run //docs/tools/demo:materialize_all_demo_outputs` | Host-only: regenerate and refresh every checked-in demo GIF. |
+| `aspect run //docs/site:dev` | Run Astro through Bazel on `http://localhost:4321`. |
+| `aspect run //docs/tools/docs:preview_site` | Serve the assembled `_site/` on `http://localhost:4322`. |
+| `aspect hovel-report` | Run report-producing tests and build `_site/` with their evidence. |
+| `aspect run //repo-tools/deps:update_python_locks` | Refresh the pnpm and hashed Sphinx locks with Bazel-managed tools. |
 
 Do not run Node, pnpm, Astro, or Bazel directly. Do not edit `_site/`.
 
@@ -79,24 +79,24 @@ Normal docs builds never invoke VHS, Chrome, tmux, or Docker. They consume the
 checked-in GIFs under `public/assets/demos/`, which makes site assembly and link
 validation eligible for sandboxed and remote execution.
 
-When a tape or the UI changes, run the narrowest `task docs:demos...`
-command above on a host with the required services. The Task-backed materializer
+When a tape or the UI changes, run the narrowest `aspect run //docs/tools/demo:materialize_docs_demo_outputs...`
+command above on a host with the required services. The Aspect-backed materializer
 renders the selected Bazel demo targets, checks their durations, and replaces
 the corresponding checked-in GIFs. Review those binary changes, then run
-`task docs:check`; missing or stale links fail while assembling the site.
+`aspect hovel-check docs`; missing or stale links fail while assembling the site.
 
 Astro always builds `reports/tests/latest/index.html`, its styles, and its
 JavaScript, so navigation is valid in every artifact. Bazel test evidence is
-necessarily post-test data: `task test:report` writes JSON, logs, and XML to
+necessarily post-test data: `aspect hovel-report` writes JSON, logs, and XML to
 `.test-report/evidence/`; the explicit report materializer attaches that evidence
-without replacing Astro HTML. Use `task docs:report` for the complete
-test-to-published-site workflow. A normal `task docs:build` is deterministic and
+without replacing Astro HTML. Use `aspect hovel-report` for the complete
+test-to-published-site workflow. A normal `aspect run //docs/tools/docs:stage_site` is deterministic and
 always publishes the report status page without ambient workspace evidence.
 
-On CI, `task docs:report` produces the evidence-backed `_site/` tree before the
+On CI, `aspect hovel-report` produces the evidence-backed `_site/` tree before the
 `docs-site` artifact is uploaded. The Pages workflow promotes that exact
 artifact after the full CI workflow succeeds on `main`; it does not rerun the
-test suite. A manual Pages dispatch runs `task docs:report` before upload.
+test suite. A manual Pages dispatch runs `aspect hovel-report` before upload.
 
 Astro also owns `api/sdk/index.html` and `api/sdk/go/index.html`. Their card
 metadata is centralized in `src/lib/apiReferences.ts` and shared with search.

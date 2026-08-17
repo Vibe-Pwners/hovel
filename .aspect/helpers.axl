@@ -1,0 +1,13 @@
+def run_aspect(ctx: TaskContext, args: list[str], cwd: str = "") -> int:
+    root = ctx.std.env.aspect_root_dir()
+    command = ctx.std.process.command("aspect").args(args)
+    command = command.current_dir(cwd if cwd else root)
+    status = command.spawn().wait()
+    return status.code or 0
+
+def run_steps(ctx: TaskContext, steps: list) -> int:
+    for command, cwd in steps:
+        code = run_aspect(ctx, command, cwd)
+        if code != 0:
+            return code
+    return 0

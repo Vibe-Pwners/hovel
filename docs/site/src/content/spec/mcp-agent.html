@@ -10,9 +10,9 @@
 <pre data-lang="shell"><code>hovel mcp --workspace .hovel
 hovel mcp --workspace .hovel --config lab.yaml
 hovel mcp --transport http --workspace .hovel
-task mcp
+aspect hovel mcp
 </code></pre>
-        <p>The default transport is MCP stdio. Stdio keeps the local trust boundary tight: the MCP client launches <code>hovel mcp</code> as a subprocess, Hovel writes MCP JSON-RPC only to stdout, and diagnostic logs go to stderr. <code>--transport http</code> serves streamable HTTP on localhost by default; use <code>--http-addr</code> to pin the listen address. <code>task mcp</code> builds and installs or links the example modules for the dev workspace; direct launches can pass <code>--config</code> to select the same module search paths and indexes as other front ends.</p>
+        <p>The default transport is MCP stdio. Stdio keeps the local trust boundary tight: the MCP client launches <code>hovel mcp</code> as a subprocess, Hovel writes MCP JSON-RPC only to stdout, and diagnostic logs go to stderr. <code>--transport http</code> serves streamable HTTP on localhost by default; use <code>--http-addr</code> to pin the listen address. <code>aspect hovel mcp</code> builds and installs or links the example modules for the dev workspace; direct launches can pass <code>--config</code> to select the same module search paths and indexes as other front ends.</p>
         <p><code>hovel mcp</code> attaches to <code>hoveld</code> over the stable local daemon RPC, registers as an MCP operator entity, heartbeats while connected, and detaches on shutdown. The current local-first model keeps MCP in the adapter process instead of exposing MCP directly from <code>hoveld</code>. Direct daemon-hosted MCP is a future team or remote-deployment shape once authorization, session binding, and remote operator identity are source-backed. The daemon RPC methods used by MCP are documented in <a href="daemon-rpc.html">Daemon RPC Contract</a>.</p>
 
         <h2>Demo Harness</h2>

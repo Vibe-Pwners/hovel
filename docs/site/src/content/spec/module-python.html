@@ -371,9 +371,9 @@ def test_session_over_framed_rpc() -&gt; None:
         </p>
 <p>
           The Python SDK and in-repo Python examples now live outside the core Bazel
-          workspace. Validate them through <code>task sdk:test</code>,
-          <code>task sdk:ci</code>, <code>task modules:examples:test</code>, and
-          <code>task modules:examples:ci</code>; the Task-backed targets remain hermetic.
+          workspace. Validate them through <code>aspect hovel-check sdk</code>,
+          <code>aspect hovel-check sdk</code>, <code>aspect hovel-check modules</code>, and
+          <code>aspect hovel-check modules</code>; the Aspect-backed targets remain hermetic.
         </p>
         <p>
           Move to daemon or CLI tests only after pure parsing, schema, failure paths,
@@ -400,7 +400,7 @@ launch:
       command: ["{python}", "-m", "hovel_example_survey"]</code></pre>
 <pre data-lang="shell"><code>hovel module install --link "$PWD/modules/examples/python/mock_survey"
 hovel module check mock-survey
-task start
+aspect hovel cli
 hovel&gt; module installed  # mock-survey, mock-exploit, mock-exploit-session ...</code></pre>
         <p>
           Python modules need no native compile step. See

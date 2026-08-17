@@ -1,0 +1,13 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "public_api_baseline_test",
+    srcs = ["public_api_baseline_test.py"],
+    data = [
+        "public_api_baseline.json",
+        "//sdk/go/hovel:sources",
+        "//sdk/python:sources",
+        "//sdk/rust/hovel:sources",
+    ],
+    python_version = "PY3",
+)

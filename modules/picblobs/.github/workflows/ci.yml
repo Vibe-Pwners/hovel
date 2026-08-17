@@ -51,10 +51,10 @@ jobs:
         run: lefthook validate
 
       - name: Check formatting
-        run: task fmt:check
+        run: aspect format:check
 
       - name: Check lint
-        run: task lint:check
+        run: aspect lint:check
 
   bazel-tests:
     runs-on: ubuntu-latest
@@ -101,13 +101,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Check generated files are fresh
-        run: task bazel:generate-check
+        run: aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:generate_check
 
       - name: Build all platforms with lint aspect
-        run: task bazel:build
+        run: aspect build //modules/picblobs/provider:picblobs-provider
 
       - name: Run Bazel test suite
-        run: task bazel:test
+        run: aspect test --bazel-flag=--config=picblobs_ci //modules/picblobs:bazel_test_suite
 
   stage-test-assets:
     runs-on: ubuntu-latest
@@ -149,7 +149,7 @@ jobs:
           echo "${GITHUB_WORKSPACE}/python/.venv/bin" >> "${GITHUB_PATH}"
 
       - name: Stage test assets
-        run: task stage
+        run: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -209,7 +209,7 @@ jobs:
           echo "${GITHUB_WORKSPACE}/python/.venv/bin" >> "${GITHUB_PATH}"
 
       - name: Run full test suite
-        run: task test -- -q
+        run: aspect test -q
 
   verify-e2e:
     needs: stage-test-assets
@@ -252,7 +252,7 @@ jobs:
           echo "${GITHUB_WORKSPACE}/python/.venv/bin" >> "${GITHUB_PATH}"
 
       - name: Run picblobs-cli verify
-        run: task verify
+        run: aspect run //modules/picblobs/python_cli:picblobs-cli -- verify
 
   build-smoke:
     needs: stage-test-assets
@@ -304,7 +304,7 @@ jobs:
           grep -F "Hello, world!" /tmp/picblobs-run.txt
 
       - name: Build distributions
-        run: task dist
+        run: aspect hovel-release picblobs-cli
 
       - name: Smoke-install built wheels
         run: |

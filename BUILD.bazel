@@ -51,6 +51,7 @@ test_suite(
 test_suite(
     name = "sdk_test",
     tests = [
+        "//sdk/compat:public_api_baseline_test",
         "//sdk/go/hovel:hovel_test",
         "//sdk/go/hoveltest:hoveltest_test",
         "//sdk/python:hovel_sdk_test",

@@ -5,15 +5,15 @@ repository. (`CLAUDE.md` is a symlink to this file.)
 
 ## The one rule for the build system
 
-**Always invoke the build system through [Task](https://taskfile.dev/)
-(`task <name>`). Never call `bazel`, `gofmt`, `uv`, or `lefthook` directly.**
+**Always invoke the build system through [Aspect CLI](https://aspect.build/cli)
+(`aspect <command>`). Never call `bazel`, `gofmt`, `uv`, or `lefthook` directly.**
 
-`Taskfile.yml` is the single source of truth for how the project is built,
+The `.aspect/` command configuration is the single source of truth for how the project is built,
 tested, linted, formatted, and run. CI, the git hooks, the docs, and you all go
-through it. If something cannot be done with an existing task, add or fix a task
-rather than running the underlying tool ad hoc — then use the task.
+through it. If something cannot be done with an existing command, add or fix an
+AXL command rather than running the underlying tool ad hoc.
 
-Run `task --list` to see everything available.
+Run `aspect help` to see everything available.
 
 ## Shell in the build graph
 
@@ -40,38 +40,38 @@ or ffmpeg until they have a pinned execution toolchain.
 
 ## Common tasks
 
-| Task | What it does |
+| Command | What it does |
 | --- | --- |
-| `task` / `task --list` | List all tasks. |
-| `task build` | Build the core Hovel binary workspace. |
-| `task build -- //cmd/hovel` | Build a specific target (args after `--`). |
-| `task test` | Run core Hovel binary workspace tests. |
-| `task test -- //internal/domain/...` | Run specific tests. |
-| `task run -- //cmd/hovel -- daemon status` | Run an arbitrary target. |
-| `task lint` | Core Go formatting + golangci-lint + Gazelle checks (read-only). |
-| `task fmt` | Auto-format wired slices: core Go/Gazelle plus Go SDK sources. |
-| `task coverage` | Run core domain and application coverage ratchets. |
-| `task checkout:status` | Show which repository slices are present. |
-| `task check` | Run checks for slices present in the current checkout. |
-| `task ci` | Require a full checkout, then run the wired full gate. |
-| `task docs:build` | Build the complete docs site and materialize it to root `_site/`. |
-| `task docs:check` | Build and validate the hermetic Astro docs artifact. |
-| `task docs:dev` | Run the Bazel-managed Astro development server on port 4321. |
-| `task docs:preview` | Serve the materialized `_site/` on port 4322. |
-| `task docs:report` | Run report-producing tests and build `_site/` with the latest evidence. |
-| `task start` (`cli`) / `task daemon` | Launch the interactive CLI / the daemon. |
-| `task status` / `task init` / `task reset` | Dev workspace: status, init, wipe-and-relaunch. |
+| `aspect help` | List all commands. |
+| `aspect build` | Build the core Hovel binary workspace. |
+| `aspect build @hovel_core//cmd/hovel` | Build the Hovel CLI target. |
+| `aspect test` | Run core Hovel binary workspace tests. |
+| `aspect test //internal/domain/...` | Run specific tests. |
+| `aspect hovel status` | Run a Hovel development command. |
+| `aspect hovel-check core` | Core Go formatting + golangci-lint + Gazelle checks (read-only). |
+| `aspect hovel-format` | Auto-format wired slices: core Go/Gazelle plus Go SDK sources. |
+| `aspect test --coverage` | Run core domain and application coverage ratchets. |
+| `python3 repo-tools/tasks/checkout.py status` | Show which repository slices are present. |
+| `aspect hovel-check` | Run checks for slices present in the current checkout. |
+| `aspect hovel-check` | Require a full checkout, then run the wired full gate. |
+| `aspect run //docs/tools/docs:stage_site` | Build and materialize the docs site to `_site/`. |
+| `aspect hovel-check docs` | Build and validate the hermetic Astro docs artifact. |
+| `aspect run //docs/site:dev` | Run the Bazel-managed Astro development server on port 4321. |
+| `aspect run //docs/tools/docs:preview_site` | Serve the materialized `_site/` on port 4322. |
+| `aspect hovel-report` | Run report-producing tests and build `_site/` with the latest evidence. |
+| `aspect hovel cli` (`cli`) / `aspect hovel daemon` | Launch the interactive CLI / the daemon. |
+| `aspect hovel status` / `aspect hovel init` | Dev workspace status and initialization. |
 
 ## Definition of done
 
-Before considering a code change complete, run the strongest Task-backed gate
-available for the checked-out slices. For core changes, run **`task ci`** from a
-full checkout or **`task core:ci`** from a core-only checkout. The wired gate
+Before considering a code change complete, run the strongest Aspect-backed gate
+available for the checked-out slices. For core changes, run **`aspect hovel-check`** from a
+full checkout or **`aspect hovel-check core`** from a core-only checkout. The wired gate
 currently covers core lint, build, tests, race, fuzz smoke, and coverage.
 
-If you added, moved, or removed Go files or imports, run **`task fmt`** so
+If you added, moved, or removed Go files or imports, run **`aspect hovel-format`** so
 `gofmt` and Gazelle-generated `BUILD.bazel` files are up to date; otherwise
-`task lint` will fail on the Gazelle diff check. When you add a new core test
+`aspect hovel-check core` will fail on the Gazelle diff check. When you add a new core test
 target, also add it to the `test_suite` in `core/BUILD.bazel`.
 
 ## Docs authoring
@@ -123,18 +123,18 @@ HTML containing exactly one page-level `h1`:
   lives in `src/pages/index.astro`.
 - Keep the build hermetic: do not add CDN assets, runtime network dependencies,
   or host `node`, `npm`, `pnpm`, or Python package assumptions. Update
-  dependencies with `task docs:deps`, which uses Bazel-managed pnpm and uv to
-  refresh the checked-in JavaScript and hashed Python locks.
-- After docs changes, run `task docs:check`. Use `task docs:build` when the root
+  dependencies with the Bazel-managed dependency targets through `aspect run`;
+  refresh both the checked-in JavaScript and hashed Python locks.
+- After docs changes, run `aspect hovel-check docs`. Use `aspect run //docs/tools/docs:stage_site` when the root
   `_site/` materialization is required.
-- Test evidence is generated after Bazel finishes. Use `task docs:report` when
+- Test evidence is generated after Bazel finishes. Use `aspect hovel-report` when
   `_site/reports/tests/latest/` must contain the latest monorepo test report.
-- `task docs:build` is deterministic and does not consume ambient
+- The normal docs staging target is deterministic and does not consume ambient
   `.test-report/` files. Astro owns the report HTML; report builds attach only
   generated JSON, logs, XML, and artifacts.
-- CI uploads the evidence-backed `_site/` from `task docs:report` as the
+- CI uploads the evidence-backed `_site/` from `aspect hovel-report` as the
   `docs-site` artifact. The Pages workflow promotes that exact artifact after a
-  successful `main` CI run; manual Pages dispatches run the same Task contract.
+  successful `main` CI run; manual Pages dispatches run the same Aspect contract.
 
 ## Architecture guardrails
 

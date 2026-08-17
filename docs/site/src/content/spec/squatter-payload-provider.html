@@ -504,12 +504,12 @@ capabilities        host.info, file.get, file.put, file.stat, registry.query,
         <h2>Build Contract</h2>
         <p>
           Squatter now lives in the <code>modules/</code> slice, outside the core
-          Hovel framework workspace. Use <code>task modules:ci</code> for the hermetic
-          module gate, <code>task modules:wine-test</code> for the host Wine boundary,
-          <code>task modules:wine-docker-test</code> for both real PE functional runs,
-          <code>task modules:squatter:coverage</code> for the 90% aggregate Go ratchet,
-          and <code>task release:modules-package</code> for installable archives. Keep
-          Squatter labels and host dependencies behind those Task contracts rather than
+          Hovel framework workspace. Use <code>aspect hovel-check modules</code> for the hermetic
+          module gate, <code>aspect hovel-check modules</code> for the host Wine boundary,
+          <code>aspect hovel-check modules</code> for both real PE functional runs,
+          <code>aspect hovel-check modules</code> for the 90% aggregate Go ratchet,
+          and <code>aspect hovel-release modules</code> for installable archives. Keep
+          Squatter labels and host dependencies behind those Aspect contracts rather than
           calling Bazel or Wine directly.
         </p>
         <p>

@@ -98,8 +98,8 @@
 
     <h2>Build it</h2>
 <pre data-lang="bash"><code>source sourceme
-task stage
-task verify</code></pre>
+aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs
+aspect run //modules/picblobs/python_cli:picblobs-cli -- verify</code></pre>
   </main>
 
   <footer class="sitefoot">

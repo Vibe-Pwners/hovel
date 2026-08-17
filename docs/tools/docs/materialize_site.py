@@ -70,7 +70,7 @@ def copy_tree(source: Path, destination: Path) -> None:
 def copy_report(source: Path, destination: Path) -> None:
     data = source / "data/report.json"
     if not data.is_file():
-        raise SystemExit(f"missing generated report evidence: {data}; run `task test:report`")
+        raise SystemExit(f"missing generated report evidence: {data}; run `aspect hovel-report`")
     for name in REPORT_DIRECTORIES:
         child = source / name
         if child.is_dir():

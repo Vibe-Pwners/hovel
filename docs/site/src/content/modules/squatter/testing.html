@@ -10,8 +10,8 @@
         </p>
 
         <h2>Primary Checks</h2>
-<pre data-lang="shell"><code>task modules:test
-task bazel:test -- //:modules_test</code></pre>
+<pre data-lang="shell"><code>aspect hovel-check modules
+aspect test //:modules_test</code></pre>
         <p>
           This gate covers the provider, shell, SMB pipe client, wire framing,
           transfer client, Squatter package checks, workspace module-install checks, PE
@@ -19,7 +19,7 @@ task bazel:test -- //:modules_test</code></pre>
         </p>
 
         <h2>Go Coverage Ratchet</h2>
-<pre data-lang="shell"><code>task modules:squatter:coverage</code></pre>
+<pre data-lang="shell"><code>aspect hovel-check modules</code></pre>
         <p>
           This task collects one LCOV report from the provider, shell, SMB pipe,
           wire, and file-transfer suites, then fails below 90% aggregate line
@@ -30,9 +30,9 @@ task bazel:test -- //:modules_test</code></pre>
         </p>
 
         <h2>Wine Runtime Checks</h2>
-<pre data-lang="shell"><code>task modules:wine-test
-task modules:wine-test-32
-task modules:wine-test-64</code></pre>
+<pre data-lang="shell"><code>aspect hovel-check modules
+aspect hovel-check modules
+aspect hovel-check modules</code></pre>
         <p>
           The Wine suite runs C/C++ integration checks for command execution,
           echo, file transfer, frames, framing, nanopb round trips, and the
@@ -40,7 +40,7 @@ task modules:wine-test-64</code></pre>
         </p>
 
         <h2>Docker Wine Functional Boundary</h2>
-<pre data-lang="shell"><code>task modules:wine-docker-test</code></pre>
+<pre data-lang="shell"><code>aspect hovel-check modules</code></pre>
         <p>
           The Docker check receives the concrete x86 and x64 PE artifacts from
           Bazel, creates isolated <code>WINEARCH=win32</code> and
@@ -80,7 +80,7 @@ task modules:wine-test-64</code></pre>
 
         <h2>Evidence Report</h2>
         <p>
-          <code>task test:report</code> refreshes line coverage, the full Docker
+          <code>aspect hovel-report</code> refreshes line coverage, the full Docker
           Wine matrix, and the browsable test evidence consumed by the docs
           site. The report's Coverage tab shows each ratchet and E2E matrix
           count. Its Jobs tab opens the Squatter Wine E2E job by default and
@@ -100,7 +100,7 @@ task modules:wine-test-64</code></pre>
           path. Manual static checks for the C tree live under
           <code>modules/squatter/windows/src</code>.
         </p>
-<pre data-lang="shell"><code>task bazel:test -- //modules/squatter/windows:squatter_x86_exe_pe_test
-task bazel:test -- //modules/squatter/windows:source_contract_test
-task bazel:build -- //modules/squatter/windows/src:static_analysis</code></pre>
+<pre data-lang="shell"><code>aspect test //modules/squatter/windows:squatter_x86_exe_pe_test
+aspect test //modules/squatter/windows:source_contract_test
+aspect build //modules/squatter/windows/src:static_analysis</code></pre>
       </article>

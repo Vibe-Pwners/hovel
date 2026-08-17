@@ -14,7 +14,7 @@ class Slice:
     name: str
     description: str
     paths: tuple[str, ...]
-    check_task: str
+    check_scope: str
 
 
 SLICES: tuple[Slice, ...] = (
@@ -22,25 +22,25 @@ SLICES: tuple[Slice, ...] = (
         name="repo",
         description="root Bazel policy, ownership, visibility, and BUILD/Starlark hygiene",
         paths=("BUILD.bazel", "OWNERS", "tools/bazel"),
-        check_task="repo:quality",
+        check_scope="repo",
     ),
     Slice(
         name="core",
         description="framework, CLI, daemon, domain/app layers, schemas, and core build system",
         paths=("core",),
-        check_task="core:check",
+        check_scope="core",
     ),
     Slice(
         name="sdk",
         description="public Python, Go, and Rust module SDKs",
         paths=("sdk",),
-        check_task="sdk:ci",
+        check_scope="sdk",
     ),
     Slice(
         name="module-examples",
         description="Go, Python, and Rust example modules",
         paths=("modules/examples/go", "modules/examples/python", "modules/examples/rust"),
-        check_task="modules:examples:ci",
+        check_scope="module-examples",
     ),
     Slice(
         name="modules",
@@ -61,13 +61,13 @@ SLICES: tuple[Slice, ...] = (
             "modules/squatter/windows",
             "modules/tools",
         ),
-        check_task="modules:ci",
+        check_scope="modules",
     ),
     Slice(
         name="docs",
         description="static book, site assets, and demo recordings",
         paths=("docs",),
-        check_task="docs:check",
+        check_scope="docs",
     ),
 )
 
@@ -123,12 +123,16 @@ def check_present(repo: Path) -> int:
             print(f"{checkout_slice.name}: skipped; not checked out", flush=True)
             continue
         present += 1
-        if checkout_slice.check_task == "":
+        if checkout_slice.check_scope == "":
             print(f"{checkout_slice.name}: present; no slice check is wired yet", flush=True)
             continue
         ran += 1
-        print(f"{checkout_slice.name}: running task {checkout_slice.check_task}", flush=True)
-        result = subprocess.run([task_executable(), checkout_slice.check_task], cwd=repo, check=False)
+        print(f"{checkout_slice.name}: running Aspect check {checkout_slice.check_scope}", flush=True)
+        result = subprocess.run(
+            [aspect_executable(), "hovel-check", checkout_slice.check_scope],
+            cwd=repo,
+            check=False,
+        )
         if result.returncode != 0:
             return result.returncode
     if present == 0:
@@ -137,9 +141,9 @@ def check_present(repo: Path) -> int:
     return 0
 
 
-def task_executable() -> str:
-    """Return the Task executable selected by the parent Task process."""
-    return os.environ.get("TASK_EXE", "").strip() or "task"
+def aspect_executable() -> str:
+    """Return the Aspect CLI executable selected by the caller."""
+    return os.environ.get("ASPECT_EXE", "").strip() or "aspect"
 
 
 def require_paths(repo: Path, paths: tuple[str, ...]) -> int:
@@ -149,7 +153,7 @@ def require_paths(repo: Path, paths: tuple[str, ...]) -> int:
     print("this task requires paths that are not checked out:", file=sys.stderr)
     for path in missing:
         print(f"  - {path}", file=sys.stderr)
-    print("use `task check` to run the checks available in this partial checkout", file=sys.stderr)
+    print("use `aspect hovel-check` to run the checks available in this partial checkout", file=sys.stderr)
     return 2
 
 

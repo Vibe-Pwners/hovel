@@ -37,48 +37,44 @@ common source of confusion:
   dumps), `docs/` (generated HTML guide), `spec/` + `SGM.md` + `sprints/`
   (specification-graph docs — reference material, not always current).
 
-## Task runner — the single entry point
+## Build entry point
 
-Every repo workflow runs through [Task](https://taskfile.dev) (`Taskfile.yml`).
-There is **one** canonical command per workflow; prefer `task <name>` over
-calling the underlying scripts directly. Prerequisites: `task` and `uv` on PATH.
+Every repository workflow runs through Aspect CLI. Bazel-managed targets provide
+the implementation tools; do not invoke those tools directly.
 
 ```bash
-task            # or `task --list` — show every task with a description
+aspect help
 ```
 
 The tasks wrap the real implementations (`tools/*.py` and Bazel targets). Pass
 extra args after `--`, e.g.
-`task test -- --test_arg=-k --test_arg=extract`.
+`aspect test --test_arg=-k --test_arg=extract`.
 
 ## Dev setup
 
 ```bash
-source sourceme     # runs `task setup`
+source sourceme
 ```
 
-`task setup` verifies the generated Bazel metadata needed by the source tree.
-Tooling is provided by Task/Bazel targets rather than a checked-out venv.
+The setup check verifies generated Bazel metadata. Tooling is provided by
+Aspect/Bazel targets rather than a checked-out venv.
 
 ## Building
 
 Target = what to build. Config = how to build it.
 
 ```bash
-task build                       # //modules/picblobs/release:full for linux_x86_64
-task build PLATFORM=linux_aarch64
-task build PLATFORM=linux_x86_64 MODE=debug
-task stage                       # build every platform + stage into the package tree
-task stage -- --targets hello    # pass-through flags to the staging materializer
+aspect build --bazel-flag=--config=linux_x86_64 //modules/picblobs/release:full
+aspect build --bazel-flag=--config=linux_aarch64 //modules/picblobs/release:full
+aspect build --bazel-flag=--config=linux_x86_64 --bazel-flag=--config=debug //modules/picblobs/release:full
+aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs
 ```
 
 ## Testing
 
 ```bash
-task test                                # Bazel-integrated suite
-task test -- --test_arg=-k --test_arg=test_extract
-task test:unit / task test:payload       # subsets
-task verify                              # end-to-end: run every staged blob
+aspect test --bazel-flag=--config=picblobs_ci //modules/picblobs:bazel_test_suite
+aspect test --bazel-flag=--test_arg=-k --bazel-flag=--test_arg=test_extract //modules/picblobs/python:tests
 ```
 
 The Python and CLI pytest suites run as Bazel `py_test` targets.
@@ -91,24 +87,22 @@ architectures, traits, and syscall numbers. Most boilerplate (C headers,
 runners) is generated from it.
 
 ```bash
-task generate          # regenerate all derived files
-task generate:check    # fail if anything is stale
+aspect run //modules/picblobs/tools:generate_write
+aspect run //modules/picblobs/tools:generate_check
 ```
 
-CI enforces freshness via the Bazel target `//modules/picblobs/tools:generate_check`
-(`task bazel:generate-check`).
+CI enforces freshness via `aspect run //modules/picblobs/tools:generate_check`.
 
 ## Formatting and linting
 
 ```bash
-task fmt           # clang-format (C) + ruff format (Python) + buildifier (Bazel)
-task fmt:check     # check-only (fails if unformatted)
-task lint          # ruff + lizard + buildifier
-task lint:c        # clang-tidy via the Bazel lint aspect
-task check         # all non-mutating gates: generate:check + fmt:check + lint:check + lint:c
+aspect run //modules/picblobs/tools:format_write
+aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:format_check
+aspect run //modules/picblobs/tools:lint_run
+aspect hovel-check modules
 ```
 
-The same Task-backed checks are run automatically by the lefthook git hooks
+The same Aspect-backed checks are run automatically by the lefthook git hooks
 (pre-commit / pre-push) and by CI. The `:check` tasks set
 `PICBLOBS_REQUIRE_LINT_TOOLS=1`, making a missing declared formatter/linter a
 hard error instead of a skip.
@@ -116,9 +110,8 @@ hard error instead of a skip.
 ## Releasing
 
 ```bash
-task version -- 0.2.0      # set the version across both pyprojects + __init__
-task dist                  # build + validate wheels/sdists for both packages
-task clean                 # remove build/dist artifacts + `bazel clean`
+aspect run //modules/picblobs/tools:update_version -- 0.2.0
+aspect hovel-release picblobs-cli
 ```
 
 ## Key conventions
@@ -130,12 +123,12 @@ task clean                 # remove build/dist artifacts + `bazel clean`
 - Debug/release are orthogonal `--config=debug` / `--config=release` flags, not
   separate targets.
 - Toolchain SHA256 hashes in `tools/registry.py` must be pinned. Never leave
-  empty; `task generate` materializes them into `toolchains/repositories.bzl`.
+  empty; the `generate_write` target materializes them into `toolchains/repositories.bzl`.
 - `hello_windows` only builds for `windows:*` platform configs (TEB support is
   arch-gated).
 - The Windows test runner (`tests/runners/windows/runner.c`) is hand-written
   (not generated) — it's a **Linux** binary that mocks TEB/PEB. Build it with a
-  Linux config: `task -t ../../Taskfile.yml bazel:build -- --config=linux_x86_64 //modules/picblobs/tests/runners/windows:runner`.
+  Linux config: `aspect build --bazel-flag=--config=linux_x86_64 //modules/picblobs/tests/runners/windows:runner`.
 - The FreeBSD test runner is a hand-written translating loader (like the Windows
   runner) — it patches FreeBSD syscall numbers to Linux equivalents at load time
   so FreeBSD-targeted blobs run under QEMU-on-Linux. Included in `//modules/picblobs/release:full`.
@@ -218,14 +211,14 @@ the registry.
 ## Troubleshooting
 
 - **"No blob for X/Y/Z"**: `picblobs-cli list` to see what's staged; build with
-  `task stage`.
+  `aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs`.
 - **Can't execute a cross-arch blob**: resolution order is direct exec
   (host-native, or routed by a binfmt_misc handler) → `qemu-*-static` / `qemu-*`
   on PATH → fail. See `qemu_launcher()` / `exec_command()` in `runner.py`.
   Install `qemu-user-binfmt` (Ubuntu 26.04+, preferred) or `qemu-user-static`
   (older) / `brew install qemu` (macOS). Check what this host can run with the
   "runnable" line in `picblobs-cli info`.
-- **Runner binary not found**: build/stage runners with `task stage` (do not
+- **Runner binary not found**: build/stage runners with `aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs` (do not
   pass `--no-runners`); check `python/picblobs/_runners/linux/x86_64/runner`.
 - **Objdump not found (disassembly)**: install a cross-toolchain
   (`apt install binutils-{arm,aarch64,mips}-linux-gnu`) or let Bazel fetch the

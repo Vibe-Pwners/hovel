@@ -1,4 +1,13 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
 package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "check_coverage",
+    srcs = ["check_coverage.py"],
+    main = "check_coverage.py",
+    python_version = "PY3",
+)
 
 exports_files([
     "event_type_fuzz_smoke_test.py",

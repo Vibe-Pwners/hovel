@@ -66,10 +66,10 @@
 lefthook run pre-commit --all-files
 lefthook run pre-push
 
-task fmt                        # format all C, Python, and Bazel files
-task fmt:check                  # verify formatting (CI)
-task lint                       # ruff + lizard + buildifier
-task lint:c                     # clang-tidy via Bazel
+aspect hovel-format                        # format all C, Python, and Bazel files
+aspect hovel-check modules                  # verify formatting (CI)
+aspect hovel-check core                       # ruff + lizard + buildifier
+aspect hovel-check modules                     # clang-tidy via Bazel
 </code></pre>
 <p><code>source sourceme</code> now installs <code>lefthook</code> into <code>python/.venv</code>, activates that
 environment, and installs the repo hooks. The hooks are split by cost:</p>

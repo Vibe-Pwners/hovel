@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 VENV_BIN="$ROOT/python/.venv/bin"
 
 if [ ! -x "$VENV_BIN/python" ]; then
-    echo "error: missing $VENV_BIN/python. Run: task setup" >&2
+    echo "error: missing $VENV_BIN/python; use the Aspect targets from the repository root" >&2
     exit 1
 fi
 

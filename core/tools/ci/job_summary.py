@@ -30,8 +30,8 @@ JOBS = {
         title="CI Repository Quality Gate",
         purpose="Validates repository architecture, hermeticity policy, checkout dispatch, and BUILD/Starlark hygiene.",
         commands=(
-            "task checkout:status",
-            "task repo:quality",
+            "python3 repo-tools/tasks/checkout.py status",
+            "aspect hovel-check repo",
         ),
         proves=(
             "Repository layering, visibility, ownership, and hermeticity policies pass.",
@@ -44,9 +44,9 @@ JOBS = {
         title="CI Core Gate",
         purpose="Validates the self-contained core/ workspace: formatting, lint, nilness analysis, build, tests, race/fuzz smoke, coverage ratchets, and release wheel buildability for the Hovel binary.",
         commands=(
-            "task checkout:status",
-            "task core:ci",
-            "task release:hovel-wheels",
+            "python3 repo-tools/tasks/checkout.py status",
+            "aspect hovel-check core",
+            "aspect hovel-release hovel",
         ),
         proves=(
             "Core Go/Gazelle formatting, lint rules, and Bazel-native nilness analysis are clean.",
@@ -64,7 +64,7 @@ JOBS = {
     "sdk-ci": JobSummary(
         title="CI SDK Gate",
         purpose="Validates the language SDK slice outside core/: Go, Python, and Rust SDK build and test targets.",
-        commands=("task sdk:ci",),
+        commands=("aspect hovel-check sdk",),
         proves=(
             "The root integration workspace can build the Go, Python, and Rust SDK targets against core contracts.",
             "Bazel-native nilness analysis covers the Go SDK and module targets.",
@@ -75,7 +75,7 @@ JOBS = {
     "modules-ci": JobSummary(
         title="CI Modules Gate",
         purpose="Validates in-repo modules, Squatter provider/payload build rules, package checks, workspace installation behavior, and module release package generation.",
-        commands=("task modules:ci", "task release:modules-package", "actions/upload-artifact module-packages"),
+        commands=("aspect hovel-check modules", "aspect hovel-release modules", "actions/upload-artifact module-packages"),
         proves=(
             "Go and Rust example modules build.",
             "Squatter provider and Windows payload targets build.",
@@ -91,7 +91,7 @@ JOBS = {
     "docs-ci": JobSummary(
         title="CI Docs, Reports, And Demos Gate",
         purpose="Runs report-producing monorepo tests and docs verification, then stages the evidence-backed GitHub Pages artifact.",
-        commands=("task docs:report", "actions/upload-artifact docs-site"),
+        commands=("aspect hovel-report", "actions/upload-artifact docs-site"),
         proves=(
             "The wired monorepo test suites and docs verification tests pass.",
             "Checked-in demo assets are assembled and link-checked without host Chrome or tmux.",
@@ -106,7 +106,7 @@ JOBS = {
     "squatter-wine": JobSummary(
         title="CI Squatter Wine Gate",
         purpose="Runs the Windows Squatter payload under Wine and renders the Docker/Wine-backed documentation demo.",
-        commands=("apt install wine32 wine64", "task modules:wine-test", "task docs:demos:wine"),
+        commands=("apt install wine32 wine64", "aspect hovel-check modules", "aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs"),
         proves=(
             "The Windows x86 Squatter payload can execute through Wine-backed tests.",
             "The Squatter MCP demo can drive provider commands end to end and produce a GIF.",
@@ -122,7 +122,7 @@ JOBS = {
         purpose="Promotes the evidence-backed docs artifact from successful CI, then uploads it for GitHub Pages deployment.",
         commands=(
             "actions/download-artifact docs-site",
-            "task docs:report (manual dispatch only)",
+            "aspect hovel-report (manual dispatch only)",
             "actions/configure-pages",
             "actions/upload-pages-artifact",
         ),
@@ -139,7 +139,7 @@ JOBS = {
     "publish-hovel-build": JobSummary(
         title="Publish Hovel Wheels",
         purpose="Builds the hovel PyPI wheel set that packages the matching Hovel Go binary.",
-        commands=("task release:hovel-wheels", "actions/upload-artifact"),
+        commands=("aspect hovel-release hovel", "actions/upload-artifact"),
         proves=(
             "Root VERSION, core/VERSION, and sdk/python/pyproject.toml agree.",
             "The release tag matches the committed version on release-triggered runs.",
@@ -151,7 +151,7 @@ JOBS = {
     "publish-sdk-build": JobSummary(
         title="Publish Hovel SDK Distribution",
         purpose="Builds the hovel-sdk Python source distribution and wheel for PyPI.",
-        commands=("task release:hovel-sdk-dist", "actions/upload-artifact"),
+        commands=("aspect hovel-release sdk", "actions/upload-artifact"),
         proves=(
             "Root VERSION, core/VERSION, and sdk/python/pyproject.toml agree.",
             "The release tag matches the committed version on release-triggered runs.",
@@ -163,7 +163,7 @@ JOBS = {
     "publish-modules-build": JobSummary(
         title="Publish Module Packages",
         purpose="Builds release assets for in-repo module packages and their install indexes.",
-        commands=("task release:modules-package", "actions/upload-artifact"),
+        commands=("aspect hovel-release modules", "actions/upload-artifact"),
         proves=(
             "Root/core/SDK versions agree before release assets are produced.",
             "Module binaries are staged into modules/examples/bin/.",

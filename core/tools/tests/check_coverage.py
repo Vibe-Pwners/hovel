@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task-backed coverage ratchet for Hovel's highest-value layers."""
+"""Aspect-backed coverage ratchet for Hovel's highest-value layers."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", pathlib.Path(__file__).resolve().parents[2]))
 COVERAGE_DIR = ROOT / "coverage"
 SUMMARY_PATH = COVERAGE_DIR / "summary.md"
 
@@ -51,6 +52,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-go", action="store_true", help="Only run Python SDK coverage.")
     parser.add_argument("--skip-python", action="store_true", default=True, help="Only run Go/Bazel coverage.")
+    parser.add_argument("--analyze-go-report", action="store_true", help="Analyze the LCOV report produced by the Aspect coverage step.")
     args = parser.parse_args()
 
     COVERAGE_DIR.mkdir(exist_ok=True)
@@ -63,7 +65,7 @@ def main() -> int:
 
     results: list[CoverageResult] = []
     if not args.skip_go:
-        results.extend(run_go_coverage_layers())
+        results.extend(analyze_go_coverage_layers() if args.analyze_go_report else run_go_coverage_layers())
     if not args.skip_python:
         results.append(run_python_sdk_coverage())
 
@@ -85,7 +87,7 @@ def print_results(results: list[CoverageResult], cached: bool = False) -> int:
         failed = failed or not result.ok
     write_markdown_summary(results)
     if failed:
-        print("\nCoverage fell below the ratchet floor. Add tests or intentionally adjust the Task-backed floor.")
+        print("\nCoverage fell below the ratchet floor. Add tests or intentionally adjust the Aspect-backed floor.")
         return 1
     return 0
 
@@ -119,7 +121,7 @@ def coverage_fingerprint(skip_go: bool, skip_python: bool) -> str:
 def coverage_inputs(skip_go: bool, skip_python: bool) -> list[pathlib.Path]:
     paths: set[pathlib.Path] = {
         ROOT / ".bazelrc",
-        ROOT / "Taskfile.yml",
+        ROOT / ".aspect" / "config.axl",
         ROOT / "MODULE.bazel.lock",
         ROOT / "tools/tests/check_coverage.py",
     }
@@ -188,7 +190,12 @@ def run_go_coverage_layers() -> list[CoverageResult]:
     report = ROOT / "bazel-out/_coverage/_coverage_report.dat"
     report.unlink(missing_ok=True)
     targets = tuple(target for _, _, layer_targets, _ in GO_LAYERS for target in layer_targets)
-    run(["task", "coverage:go", "--", *targets])
+    run(["aspect", "test", "--bazel-flag=--collect_code_coverage", "--bazel-flag=--combined_report=lcov", *targets])
+    return analyze_go_coverage_layers()
+
+
+def analyze_go_coverage_layers() -> list[CoverageResult]:
+    report = ROOT / "bazel-out/_coverage/_coverage_report.dat"
     if not report.exists():
         raise SystemExit(f"coverage report not found: {report}")
     records = list(read_lcov_records(report))

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for Task-backed Picblobs staging.
+"""Compatibility wrapper for Aspect-backed Picblobs staging.
 
 The canonical staging graph is declared in Bazel and invoked through
-`task picblobs:stage`. This script exists only for older source-tree guidance
+`aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --`. This script exists only for older source-tree guidance
 that still points at `python tools/stage_blobs.py`.
 """
 

@@ -190,7 +190,7 @@ def project_root() -> Path:
 
 @pytest.fixture(scope="session")
 def blob_dir() -> Path:
-    """Path to staged .so blob files (populated by ``task stage``)."""
+    """Path to staged .so blob files (populated by the Aspect stage target)."""
     return PROJECT_ROOT / "python" / "picblobs" / "_blobs"
 
 
@@ -277,7 +277,7 @@ def _collection_filters() -> dict[str, str]:
 def _skip_marker_reason(keyword: str) -> str:
     """Return the human-facing skip reason for one capability marker."""
     reasons = {
-        "requires_blobs": "Blob assets are not staged. Run: task picblobs:stage",
+        "requires_blobs": "Blob assets are not staged. Run: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --",
         "requires_runners": (
             "Test runners not built. Run: bazel build "
             "//modules/picblobs/tests/runners/..."

@@ -177,7 +177,7 @@
         ${statusBadge(target.status)}
       </div>
       <p class="detail-meta">${escapeHtml(target.suite)} · ${escapeHtml(target.language)} · attempt ${target.attempts} · run ${target.run} · shard ${target.shard}</p>
-      <p><code>task test -- ${escapeHtml(target.label)}</code></p>
+      <p><code>aspect test ${escapeHtml(target.label)}</code></p>
       <div class="tabs">
         ${tab("log", "Log")}
         ${tab("cases", `Cases (${target.cases.length})`)}

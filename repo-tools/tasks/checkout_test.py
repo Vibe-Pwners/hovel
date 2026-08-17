@@ -17,7 +17,7 @@ def test_full_checkout_requirement_includes_repo_quality_slice() -> None:
 def test_docs_slice_uses_remote_compatible_check() -> None:
     docs_slice = next(item for item in checkout.SLICES if item.name == "docs")
 
-    assert docs_slice.check_task == "docs:check"
+    assert docs_slice.check_scope == "docs"
 
 
 def test_full_checkout_requirement_rejects_missing_repo_quality_inputs(tmp_path: Path) -> None:
@@ -36,21 +36,21 @@ def test_full_checkout_requirement_rejects_missing_repo_quality_inputs(tmp_path:
 @pytest.mark.parametrize(
     ("configured", "expected"),
     [
-        (None, "task"),
-        ("", "task"),
-        ("  ", "task"),
-        ("/declared/tools/task", "/declared/tools/task"),
-        ("  /declared/tools/task  ", "/declared/tools/task"),
+        (None, "aspect"),
+        ("", "aspect"),
+        ("  ", "aspect"),
+        ("/declared/tools/aspect", "/declared/tools/aspect"),
+        ("  /declared/tools/aspect  ", "/declared/tools/aspect"),
     ],
 )
-def test_task_executable_uses_parent_task_binary(
+def test_aspect_executable_uses_declared_binary(
     monkeypatch: pytest.MonkeyPatch,
     configured: str | None,
     expected: str,
 ) -> None:
     if configured is None:
-        monkeypatch.delenv("TASK_EXE", raising=False)
+        monkeypatch.delenv("ASPECT_EXE", raising=False)
     else:
-        monkeypatch.setenv("TASK_EXE", configured)
+        monkeypatch.setenv("ASPECT_EXE", configured)
 
-    assert checkout.task_executable() == expected
+    assert checkout.aspect_executable() == expected

@@ -1,0 +1,37 @@
+def _selected_bazel_flags(ctx: ConfigContext) -> list[str]:
+    explicit = ctx.std.env.var("HOVEL_BAZEL_ARGS")
+    if explicit:
+        return explicit.split()
+
+    if ctx.std.env.var("CI") or ctx.std.env.var("GITHUB_ACTIONS"):
+        return ["--config=ci"]
+
+    selection = ctx.std.env.aspect_root_dir().rstrip("/") + "/.hovel-bazel-config"
+    if not ctx.std.fs.exists(selection):
+        return []
+
+    mode = ctx.std.fs.open(selection).read().strip()
+    configs = {
+        "": [],
+        "local": ["--config=local-cache"],
+        "nativelink": ["--config=nativelink"],
+        "nativelink-minimal": ["--config=nativelink-minimal"],
+        "buildbuddy": ["--config=buildbuddy"],
+    }
+    if mode not in configs:
+        fail("unknown Bazel config mode in .hovel-bazel-config: " + mode)
+    return configs[mode]
+
+def config(ctx: ConfigContext):
+    flags = _selected_bazel_flags(ctx)
+    startup = ctx.std.env.var("HOVEL_BAZEL_STARTUP_ARGS")
+    startup_flags = startup.split() if startup else []
+
+    for task_name in ["build", "run", "test"]:
+        ctx.tasks[task_name].args.bazel_flags = flags
+        ctx.tasks[task_name].args.bazel_startup_flags = startup_flags
+
+    for task_name in ["build", "test"]:
+        ctx.tasks[task_name].args.repro_flavors = ["aspect"]
+
+    ctx.tasks["run"].args.run_in = "bazel-root"

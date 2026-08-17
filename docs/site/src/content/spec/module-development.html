@@ -299,13 +299,13 @@ interpreters:
 hovel module install --link "$PWD/path/to/my-module-package-root"
 
 # 3. Let Hovel validate package shape and runtime metadata without executing.
-task start
+aspect hovel cli
 hovel&gt; module installed
 hovel&gt; module check &lt;your-module-id&gt;
 hovel&gt; module inspect &lt;your-module-id&gt;
 
 # 4. Run the strongest wired slice check available before calling the integration done.
-task check</code></pre>
+aspect hovel-check</code></pre>
         <p>For a private module, use <code>--link</code> while iterating and install a built <code>.tgz</code> before sharing the chain or workspace with another operator.</p>
         <figure class="demo-figure">
           <img src="../assets/demos/mock-survey-exploit-01-inspect.gif" alt="Direct terminal demo inspecting mock survey and exploit modules before running them through a configured chain.">
@@ -455,31 +455,31 @@ hovel module install --link /home/me/dev/my-module</code></pre>
 
         <h2>Building and running</h2>
         <p>
-          As with everything in this repo, go through <a href="https://taskfile.dev/">Task</a>.
+          As with everything in this repo, go through <a href="https://aspect.build/docs/cli/">Aspect CLI</a>.
           The SDK and module slices are outside the core Bazel workspace, but the root
           Task dispatcher already wires their integration builds, tests, CI gates, and
           release packaging. Link editable module package roots while iterating.
         </p>
 <pre data-lang="shell"><code># Validate SDKs and example modules from a full source checkout
-task sdk:ci
-task modules:examples:ci
-task modules:ci
+aspect hovel-check sdk
+aspect hovel-check modules
+aspect hovel-check modules
 
 # Build release module packages and indexes when you need installable archives
-task release:modules-package
+aspect hovel-release modules
 
 # Install or link module packages for the active workspace
 hovel module install --link "$PWD/path/to/module-package-root"
 
 # Launch the interactive CLI
-task start
+aspect hovel cli
 
 # In the CLI, list installed modules for the workspace
 hovel&gt; module installed</code></pre>
         <p>
-          <code>task check</code> validates every slice present in a partial checkout;
-          <code>task ci</code> requires a full checkout and runs the wired remote-compatible
-          gate. Use <code>task start</code> or <code>task daemon</code> for the Hovel process,
+          <code>aspect hovel-check</code> validates every slice present in a partial checkout;
+          <code>aspect hovel-check</code> requires a full checkout and runs the wired remote-compatible
+          gate. Use <code>aspect hovel cli</code> or <code>aspect hovel daemon</code> for the Hovel process,
           then invoke module operations through the CLI so build and runtime assumptions
           stay aligned with CI.
         </p>

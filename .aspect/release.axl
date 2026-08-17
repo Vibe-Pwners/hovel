@@ -1,0 +1,32 @@
+load(".aspect/helpers.axl", "run_steps")
+
+def _impl(ctx: TaskContext) -> int:
+    root = ctx.std.env.aspect_root_dir()
+    kind = ctx.args.kind[0]
+    wheel_targets = [
+        "//tools/release:build_hovel_wheel_linux_amd64",
+        "//tools/release:build_hovel_wheel_linux_arm64",
+        "//tools/release:build_hovel_wheel_darwin_arm64",
+        "//tools/release:build_hovel_wheel_windows_amd64",
+        "//tools/release:build_hovel_wheel_windows_arm64",
+    ]
+    steps = {
+        "hovel": [(["run", "--bazel-flag=--compilation_mode=opt", target], root + "/core") for target in wheel_targets],
+        "sdk": [(["run", "//sdk/python:build_dist", "--", "--out-dir=dist", "--clean"], root)],
+        "modules": [(["run", "//modules/tools:package_examples"], root)],
+        "picblobs": [(["run", "--bazel-flag=--config=picblobs_cross", "//modules/picblobs/tools:stage_blobs_release"], root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs", "--out-dir=modules/picblobs/dist/picblobs", "--clean", "--validate"] + ctx.args.release_args, root)],
+        "picblobs-cli": [(["run", "--bazel-flag=--config=picblobs_cross", "//modules/picblobs/tools:stage_blobs"], root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs", "--out-dir=modules/picblobs/dist/picblobs", "--clean", "--validate"] + ctx.args.release_args, root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs-cli", "--out-dir=modules/picblobs/dist/picblobs-cli", "--clean", "--validate"] + ctx.args.release_args, root)],
+    }
+    if kind not in steps:
+        print("unknown release kind: " + kind)
+        return 2
+    return run_steps(ctx, steps[kind])
+
+hovel_release = task(
+    args = {
+        "kind": args.positional(minimum = 1, maximum = 1, description = "Artifact family: hovel, sdk, modules, picblobs, or picblobs-cli."),
+        "release_args": args.trailing_var_args(description = "Arguments forwarded to the distribution builder."),
+    },
+    summary = "Build a Hovel release artifact family without publishing it.",
+    implementation = _impl,
+)

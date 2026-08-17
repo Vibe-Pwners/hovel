@@ -102,7 +102,7 @@ def find_repo_root() -> Path:
             return candidate
     for root in candidate_roots():
         candidate = root.resolve()
-        if (candidate / "MODULE.bazel").is_file() and (candidate / "Taskfile.yml").is_file():
+        if (candidate / "MODULE.bazel").is_file() and (candidate / ".aspect").is_dir():
             return candidate
     raise SystemExit("unable to locate repository root")
 

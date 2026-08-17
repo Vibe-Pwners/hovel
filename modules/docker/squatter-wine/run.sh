@@ -9,7 +9,7 @@ exe="${HOVEL_SQUATTER_EXE:-$PWD/examples/bin/squatter.exe}"
 
 if [[ ! -f "$exe" ]]; then
   echo "missing Squatter binary: $exe" >&2
-  echo "run task modules:build first" >&2
+  echo "run aspect hovel-check modules first" >&2
   exit 2
 fi
 

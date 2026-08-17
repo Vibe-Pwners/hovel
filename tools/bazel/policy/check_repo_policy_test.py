@@ -7,30 +7,44 @@ def line_of(path: Path, expected: str) -> int:
     return path.read_text(encoding="utf-8").splitlines().index(expected) + 1
 
 
-def write_taskfile(
-    repo: Path,
-    ci_command: str = "      - task: docs:check",
-    docs_check_command: str = "      - task: docs:test",
-) -> None:
-    (repo / "Taskfile.yml").write_text(
-        f"""version: "3"
+def write_aspect_check(repo: Path, command: str = "//:docs_test") -> None:
+    path = repo / ".aspect/check.axl"
+    path.parent.mkdir(parents=True)
+    path.write_text(f'checks = ["{command}"]\n', encoding="utf-8")
 
-tasks:
-  ci:
-    desc: Remote-compatible gate.
-    cmds:
-{ci_command}
 
-  docs:check:
-    cmds:
-{docs_check_command}
-""",
+def write_hermetic_cc_config(repo: Path, workspace: str = "") -> None:
+    root = repo / workspace
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "MODULE.bazel").write_text(
+        check_repo_policy.HERMETIC_CC_VERSION
+        + "\n"
+        + "\n".join(check_repo_policy.HERMETIC_CC_TOOLCHAINS)
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / ".bazelrc").write_text(
+        check_repo_policy.LOCAL_CC_DETECTION_DISABLED + "\n",
         encoding="utf-8",
     )
 
 
+def test_hermetic_cc_configuration_is_required_in_both_workspaces(tmp_path: Path) -> None:
+    write_hermetic_cc_config(tmp_path)
+    write_hermetic_cc_config(tmp_path, "core")
+
+    assert check_repo_policy.check_hermetic_cc_toolchain(tmp_path) == []
+
+    (tmp_path / "core/.bazelrc").write_text("", encoding="utf-8")
+    violations = check_repo_policy.check_hermetic_cc_toolchain(tmp_path)
+
+    assert len(violations) == 1
+    assert violations[0].path == tmp_path / "core/.bazelrc"
+    assert "auto-detection" in violations[0].message
+
+
 def test_hermeticity_accepts_declared_host_boundary(tmp_path: Path) -> None:
-    write_taskfile(tmp_path)
+    write_aspect_check(tmp_path)
     host_rule = tmp_path / "docs/demo/demo_defs.bzl"
     host_rule.parent.mkdir(parents=True)
     host_rule.write_text(
@@ -42,7 +56,7 @@ def test_hermeticity_accepts_declared_host_boundary(tmp_path: Path) -> None:
 
 
 def test_hermeticity_rejects_unallowlisted_execution_setting(tmp_path: Path) -> None:
-    write_taskfile(tmp_path)
+    write_aspect_check(tmp_path)
     build = tmp_path / "sdk/BUILD.bazel"
     build.parent.mkdir(parents=True)
     build.write_text("use_default_shell_env = True\n", encoding="utf-8")
@@ -54,7 +68,7 @@ def test_hermeticity_rejects_unallowlisted_execution_setting(tmp_path: Path) -> 
 
 
 def test_hermeticity_ignores_local_tool_cache(tmp_path: Path) -> None:
-    write_taskfile(tmp_path)
+    write_aspect_check(tmp_path)
     generated = tmp_path / ".local/tools/BUILD.bazel"
     generated.parent.mkdir(parents=True)
     generated.write_text("use_default_shell_env = True\n", encoding="utf-8")
@@ -74,25 +88,24 @@ def test_repository_walk_prunes_local_tool_cache(tmp_path: Path) -> None:
 
 
 def test_hermeticity_rejects_host_docs_from_remote_gate(tmp_path: Path) -> None:
-    write_taskfile(tmp_path, "      - task: docs:demos")
+    write_aspect_check(tmp_path, "//docs/tools/demo:materialize_docs_demo_outputs")
 
     violations = check_repo_policy.check_hermeticity(tmp_path)
 
     assert len(violations) == 1
-    taskfile = tmp_path / "Taskfile.yml"
-    assert violations[0].path == taskfile
-    assert violations[0].line == line_of(taskfile, "      - task: docs:demos")
-    assert "host-service task 'docs:demos'" in violations[0].message
+    check_file = tmp_path / ".aspect/check.axl"
+    assert violations[0].path == check_file
+    assert violations[0].line == 1
+    assert "host-service target" in violations[0].message
 
 
 def test_hermeticity_rejects_host_docs_from_docs_check(tmp_path: Path) -> None:
-    write_taskfile(tmp_path, docs_check_command="      - task: docs:demos:all")
+    write_aspect_check(tmp_path, "//docs/tools/demo:materialize_squatter_wine_demo_outputs")
 
     violations = check_repo_policy.check_hermeticity(tmp_path)
 
     assert len(violations) == 1
-    taskfile = tmp_path / "Taskfile.yml"
-    assert violations[0].path == taskfile
-    assert violations[0].line == line_of(taskfile, "      - task: docs:demos:all")
-    assert "remote-compatible task 'docs:check'" in violations[0].message
-    assert "host-service task 'docs:demos:all'" in violations[0].message
+    check_file = tmp_path / ".aspect/check.axl"
+    assert violations[0].path == check_file
+    assert violations[0].line == 1
+    assert "host-service target" in violations[0].message
