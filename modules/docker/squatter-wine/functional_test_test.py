@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 import functional_test
 
@@ -18,6 +20,22 @@ class RecordingRunner:
 
 class FunctionalTestTest(unittest.TestCase):
     module_surface = frozenset({"cmd", "echo"})
+
+    def test_resolves_rootpath_from_bazel_runfiles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            expected = root / "_main" / "some/package/tool"
+            expected.parent.mkdir(parents=True)
+            expected.write_text("tool", encoding="utf-8")
+            with mock.patch.dict(
+                os.environ,
+                {"RUNFILES_DIR": str(root), "TEST_WORKSPACE": "_main"},
+                clear=False,
+            ):
+                self.assertEqual(
+                    functional_test.resolve_runfile(pathlib.Path("some/package/tool")),
+                    expected,
+                )
 
     def test_loads_unique_module_surface(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

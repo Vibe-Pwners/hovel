@@ -8,6 +8,7 @@ import sys
 import tarfile
 import zipfile
 from email.parser import Parser
+from email.utils import getaddresses
 from pathlib import Path
 
 _LICENSE_CLASSIFIER = "License :: OSI Approved :: Apache Software License"
@@ -64,10 +65,13 @@ def _check_license_metadata(metadata_text: str, label: str) -> None:
 
 def _check_author_metadata(metadata_text: str, label: str) -> None:
     metadata = Parser().parsestr(metadata_text)
-    author_email = metadata.get("Author-email", "")
+    authors = {
+        f"{name} <{email}>"
+        for name, email in getaddresses(metadata.get_all("Author-email", []))
+    }
 
     _require(
-        all(author in author_email for author in _AUTHOR_EMAILS),
+        all(author in authors for author in _AUTHOR_EMAILS),
         f"{label} should declare authors: {', '.join(_AUTHOR_EMAILS)}",
     )
 

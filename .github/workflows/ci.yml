@@ -19,19 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - run: python3 repo-tools/tasks/checkout.py status
       - run: aspect hovel-check repo
       - if: always()
@@ -44,19 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-repository-${{ runner.os }}-${{ hashFiles('core/MODULE.bazel.lock', 'core/.bazelversion') }}
-          restore-keys: bazel-repository-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - run: python3 repo-tools/tasks/checkout.py status
       - run: aspect hovel-check core
       - run: aspect hovel-release hovel
@@ -76,19 +56,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - run: aspect hovel-check sdk
       - if: always()
         env:
@@ -100,19 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - run: aspect hovel-check modules
       - run: aspect hovel-release modules
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -130,19 +90,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - name: Build evidence-backed Pages site
         run: aspect hovel-report
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -161,19 +111,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-      - name: Configure Bazel cache
+      - uses: ./.github/actions/setup-hovel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
       - name: Install demo host tools
         run: |
           sudo dpkg --add-architecture i386

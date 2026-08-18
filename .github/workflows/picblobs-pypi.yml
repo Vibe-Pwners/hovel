@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Picblobs version to publish. Defaults to the committed package version.
+        description: Version to publish; empty uses committed metadata.
         required: false
         type: string
 
@@ -15,158 +15,29 @@ permissions:
 
 jobs:
   build:
-    name: Build picblobs dist
-    runs-on: ubuntu-latest
     if: github.event_name != 'release' || startsWith(github.ref_name, 'picblobs-v')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: ./.github/actions/build-python-package
         with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          version: "0.11.28"
-
-      - name: Resolve expected version
-        id: version
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            expected="${GITHUB_REF_NAME#picblobs-v}"
-          elif [[ -n "${{ inputs.version }}" ]]; then
-            expected="${{ inputs.version }}"
-            expected="${expected#v}"
-            expected="${expected#picblobs-v}"
-          else
-            expected="$(python - <<'PY'
-          import pathlib
-          import tomllib
-
-          pyproject = pathlib.Path("modules/picblobs/python/pyproject.toml")
-          print(tomllib.loads(pyproject.read_text())["project"]["version"])
-          PY
-          )"
-          fi
-          echo "expected=${expected}" >> "${GITHUB_OUTPUT}"
-
-      - name: Check committed picblobs version
-        env:
-          EXPECTED_VERSION: ${{ steps.version.outputs.expected }}
-        shell: bash
-        run: |
-          python - <<'PY'
-          import os
-          import pathlib
-          import re
-          import tomllib
-
-          expected = os.environ["EXPECTED_VERSION"]
-          root = pathlib.Path("modules/picblobs")
-
-          module_text = (root / "MODULE.bazel").read_text()
-          module_version = re.search(
-              r'(?m)^module\(\n\s+name = "picblobs",\n\s+version = "([^"]+)",\n\)$',
-              module_text,
-          )
-          hovel_module_version = re.search(
-              r'(?m)^\s+version: ([^ \n]+)$',
-              (root / "hovel-module.yaml").read_text(),
-          )
-          provider_version = re.search(
-              r'(?m)^const providerVersion = "([^"]+)"$',
-              (root / "provider" / "provider.go").read_text(),
-          )
-          lib_version = tomllib.loads((root / "python" / "pyproject.toml").read_text())["project"]["version"]
-          cli_project = tomllib.loads((root / "python_cli" / "pyproject.toml").read_text())["project"]
-          cli_version = cli_project["version"]
-          init_version = None
-          for line in (root / "python" / "picblobs" / "__init__.py").read_text().splitlines():
-              if line.startswith("__version__ = "):
-                  init_version = line.split("=", 1)[1].strip().strip('"').strip("'")
-                  break
-
-          values = {
-              "MODULE.bazel": module_version.group(1) if module_version else None,
-              "hovel-module.yaml": hovel_module_version.group(1) if hovel_module_version else None,
-              "provider/provider.go": provider_version.group(1) if provider_version else None,
-              "python/pyproject.toml": lib_version,
-              "python_cli/pyproject.toml": cli_version,
-              "python/picblobs/__init__.py": init_version,
-          }
-          mismatches = {name: value for name, value in values.items() if value != expected}
-          if mismatches:
-              for name, value in mismatches.items():
-                  print(f"::error::{name} has {value!r}; expected {expected!r}")
-              raise SystemExit(1)
-          print(f"Publishing picblobs {expected} from committed module state")
-          PY
-
-      - name: Build dist
-        env:
-          EXPECTED_VERSION: ${{ steps.version.outputs.expected }}
-        run: aspect hovel-release picblobs -- --expected-version="${EXPECTED_VERSION}"
-
-      - name: Upload dist
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          package: picblobs
+          requested-version: ${{ github.event_name == 'release' && github.ref_name || inputs.version }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: picblobs-dist
           path: modules/picblobs/dist/picblobs/*
           if-no-files-found: error
 
-      - name: Job summary
-        if: always()
-        run: |
-          {
-            echo "## Build picblobs PyPI dist"
-            echo ""
-            echo "| Field | Value |"
-            echo "| --- | --- |"
-            echo "| Status | ${{ job.status }} |"
-            echo "| Version | ${{ steps.version.outputs.expected }} |"
-            echo "| Artifact | picblobs-dist |"
-            echo "| Dist path | modules/picblobs/dist/picblobs/* |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   publish:
-    name: Publish picblobs dist
     needs: build
     runs-on: ubuntu-latest
     environment: pypi-picblobs
     permissions:
-      id-token: write
       contents: read
+      id-token: write
     steps:
-      - name: Download dist
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: picblobs-dist
-          path: dist/picblobs
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
-        with:
-          packages-dir: dist/picblobs
-
-      - name: Job summary
-        if: always()
-        run: |
-          {
-            echo "## Publish picblobs to PyPI"
-            echo ""
-            echo "| Field | Value |"
-            echo "| --- | --- |"
-            echo "| Status | ${{ job.status }} |"
-            echo "| Environment | pypi-picblobs |"
-            echo "| Artifact | picblobs-dist |"
-            echo "| Publisher | pypa/gh-action-pypi-publish@v1.14.0 |"
-          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {name: picblobs-dist, path: dist/picblobs}
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with: {packages-dir: dist/picblobs}

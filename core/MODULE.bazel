@@ -75,19 +75,6 @@ use_repo(
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
-rust.repository_set(
-    name = "rust_linux_x86_64_musl_targets",
-    allocator_library = "@rules_rust//rust/private/cc:empty",
-    edition = "2021",
-    exec_triple = "x86_64-unknown-linux-gnu",
-    target_compatible_with = [
-        "//platforms:musl",
-        "@platforms//cpu:aarch64",
-        "@platforms//os:linux",
-    ],
-    target_triple = "aarch64-unknown-linux-musl",
-    versions = ["1.96.1"],
-)
 rust.toolchain(
     allocator_library = "@rules_rust//rust/private/cc:empty",
     edition = "2021",
@@ -100,6 +87,7 @@ rust.toolchain(
     extra_target_triples = [
         "aarch64-apple-darwin",
         "aarch64-pc-windows-gnullvm",
+        "aarch64-unknown-linux-gnu",
         "x86_64-pc-windows-gnullvm",
         "x86_64-unknown-linux-gnu",
     ],

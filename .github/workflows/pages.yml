@@ -26,17 +26,11 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.event_name == 'workflow_dispatch'
+      - uses: ./.github/actions/setup-hovel
         with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
+          configure-cache: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
 
       - name: Download successful CI site
         if: github.event_name == 'workflow_run'
@@ -46,12 +40,6 @@ jobs:
           path: _site
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Bazel cache
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: python3 repo-tools/tasks/configure_bazel_cache.py
 
       - name: Build evidence-backed Pages site
         if: github.event_name == 'workflow_dispatch'

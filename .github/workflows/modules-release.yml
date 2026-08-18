@@ -20,15 +20,7 @@ jobs:
     if: github.event_name != 'release' || startsWith(github.ref_name, 'v')
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/bazelisk
-            ~/.cache/bazel-repository
-          key: bazel-slices-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion') }}
-          restore-keys: bazel-slices-${{ runner.os }}-
-      - name: Set up Aspect CLI
-        uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
+      - uses: ./.github/actions/setup-hovel
       - name: Check committed version
         shell: bash
         run: |

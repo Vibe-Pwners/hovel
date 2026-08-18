@@ -1,0 +1,115 @@
+name: Build Python release package
+description: Validate and build one Hovel-owned Python distribution through Aspect.
+
+inputs:
+  package:
+    description: One of hovel, hovel-sdk, picblobs, or picblobs-cli.
+    required: true
+  requested-version:
+    description: Release tag or explicit version; empty uses committed metadata.
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: Validated package version.
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-hovel
+
+    - name: Validate committed version
+      id: version
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        REQUESTED_VERSION: ${{ inputs.requested-version }}
+      run: |
+        python3 - <<'PY'
+        import os
+        import pathlib
+        import re
+        import tomllib
+
+        package = os.environ["PACKAGE"]
+        requested = os.environ["REQUESTED_VERSION"].strip()
+        root = pathlib.Path.cwd()
+
+        if package in {"hovel", "hovel-sdk"}:
+            expected = (root / "VERSION").read_text().strip()
+            values = {
+                "VERSION": expected,
+                "core/VERSION": (root / "core/VERSION").read_text().strip(),
+                "sdk/python/pyproject.toml": tomllib.loads(
+                    (root / "sdk/python/pyproject.toml").read_text()
+                )["project"]["version"],
+            }
+            accepted = requested.removeprefix("v")
+        elif package in {"picblobs", "picblobs-cli"}:
+            picblobs = root / "modules/picblobs"
+            library = tomllib.loads((picblobs / "python/pyproject.toml").read_text())["project"]
+            cli = tomllib.loads((picblobs / "python_cli/pyproject.toml").read_text())["project"]
+            expected = library["version"] if package == "picblobs" else cli["version"]
+            module = re.search(
+                r'(?m)^module\(\n\s+name = "picblobs",\n\s+version = "([^"]+)",\n\)$',
+                (picblobs / "MODULE.bazel").read_text(),
+            )
+            descriptor = re.search(
+                r'(?m)^\s+version: ([^ \n]+)$',
+                (picblobs / "hovel-module.yaml").read_text(),
+            )
+            provider = re.search(
+                r'(?m)^const providerVersion = "([^"]+)"$',
+                (picblobs / "provider/provider.go").read_text(),
+            )
+            init = re.search(
+                r'(?m)^__version__ = ["\']([^"\']+)["\']$',
+                (picblobs / "python/picblobs/__init__.py").read_text(),
+            )
+            values = {
+                "modules/picblobs/MODULE.bazel": module.group(1) if module else None,
+                "modules/picblobs/hovel-module.yaml": descriptor.group(1) if descriptor else None,
+                "modules/picblobs/provider/provider.go": provider.group(1) if provider else None,
+                "modules/picblobs/python/pyproject.toml": library["version"],
+                "modules/picblobs/python_cli/pyproject.toml": cli["version"],
+                "modules/picblobs/python/picblobs/__init__.py": init.group(1) if init else None,
+            }
+            accepted = requested
+            for prefix in ("picblobs-cli-v", "picblobs-v", "v"):
+                if accepted.startswith(prefix):
+                    accepted = accepted[len(prefix):]
+                    break
+            dependency = f"picblobs>={expected}"
+            if package == "picblobs-cli" and dependency not in cli["dependencies"]:
+                raise SystemExit(f"python_cli/pyproject.toml is missing {dependency!r}")
+        else:
+            raise SystemExit(f"unsupported Python release package: {package}")
+
+        mismatches = {name: value for name, value in values.items() if value != expected}
+        if mismatches:
+            for name, value in mismatches.items():
+                print(f"::error::{name} has {value!r}; expected {expected!r}")
+            raise SystemExit(1)
+        if requested and accepted != expected:
+            raise SystemExit(f"requested version {requested!r} does not match committed version {expected!r}")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            print(f"version={expected}", file=output)
+        print(f"Building {package} {expected} from synchronized committed metadata")
+        PY
+
+    - name: Build distribution
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        case "${PACKAGE}" in
+          hovel) aspect hovel-release hovel ;;
+          hovel-sdk) aspect hovel-release sdk ;;
+          picblobs) aspect hovel-release picblobs -- --expected-version="${VERSION}" ;;
+          picblobs-cli) aspect hovel-release picblobs-cli -- --expected-version="${VERSION}" ;;
+          *) echo "unsupported Python release package: ${PACKAGE}" >&2; exit 2 ;;
+        esac

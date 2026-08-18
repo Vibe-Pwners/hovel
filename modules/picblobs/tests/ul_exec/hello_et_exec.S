@@ -118,8 +118,11 @@ msg:
 _start:
   mov 4, %g1
   mov 1, %o0
-  sethi %hi(msg), %o1
-  or %o1, %lo(msg), %o1
+1:
+  call 2f
+  nop
+2:
+  add %o7, msg - 1b, %o1
   mov 16, %o2
   ta 0x10
   nop

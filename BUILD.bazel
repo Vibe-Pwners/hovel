@@ -9,8 +9,15 @@ nogo(
 
 exports_files([
     ".clang-format",
+    ".github/actions/build-python-package/action.yml",
+    ".github/actions/setup-hovel/action.yml",
     ".github/workflows/ci.yml",
+    ".github/workflows/hovel-pypi.yml",
+    ".github/workflows/hovel-sdk-pypi.yml",
+    ".github/workflows/modules-release.yml",
     ".github/workflows/pages.yml",
+    ".github/workflows/picblobs-cli-pypi.yml",
+    ".github/workflows/picblobs-pypi.yml",
     "LICENSE",
     "VERSION",
     "go.work.bazel",
@@ -43,6 +50,7 @@ test_suite(
     tests = [
         "//repo-tools/deps:update_python_locks_test",
         "//repo-tools/tasks:checkout_test",
+        "//repo-tools/tasks:github_workflows_test",
         "//tools/bazel/buildifier:buildifier_test",
         "//tools/bazel/policy:repo_policy_test",
     ],

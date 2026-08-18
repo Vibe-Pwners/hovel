@@ -1,0 +1,27 @@
+name: Set up Hovel build
+description: Install Aspect CLI and configure the shared hermetic Bazel cache.
+
+inputs:
+  configure-cache:
+    description: Run the repository cache selector after installing Aspect.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/bazelisk
+          ~/.cache/bazel-repository
+        key: bazel-repository-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'MODULE.bazel', '.bazelversion', 'core/MODULE.bazel.lock', 'core/.bazelversion') }}
+        restore-keys: bazel-repository-${{ runner.os }}-
+
+    - name: Set up Aspect CLI
+      uses: aspect-build/setup-aspect@2306377a61c45954ab2df7c7311698b109364352 # v2026.26.9
+
+    - name: Configure Bazel cache
+      if: inputs.configure-cache == 'true'
+      shell: bash
+      run: python3 repo-tools/tasks/configure_bazel_cache.py
