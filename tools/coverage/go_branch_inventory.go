@@ -44,6 +44,7 @@ func main() {
 	results := flag.String("results", "coverage/go-sdk-branches.results.json", "workspace-relative report metric path")
 	hitsRoot := flag.String("hits-root", "", "directory containing go-branch-hits.jsonl test outputs")
 	scope := flag.String("scope", "Go SDK", "human-readable compatibility scope")
+	noEnforce := flag.Bool("no-enforce", false, "write evidence without failing below 100%")
 	flag.Parse()
 	workspace := os.Getenv("BUILD_WORKSPACE_DIRECTORY")
 	if workspace == "" {
@@ -127,7 +128,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Go SDK branches: %d/%d (%.2f%%; %s)\n", covered, len(edges), percentage(covered, len(edges)), destination)
-	if len(edges) == 0 || covered != len(edges) {
+	if len(edges) == 0 || (covered != len(edges) && !*noEnforce) {
 		os.Exit(1)
 	}
 }
