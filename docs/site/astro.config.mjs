@@ -5,7 +5,7 @@ const hovelVersion = readFileSync(new URL("./version.txt", import.meta.url), "ut
 
 export default defineConfig({
   output: "static",
-  trailingSlash: "never",
+  trailingSlash: "ignore",
   compressHTML: false,
   build: {
     format: "preserve",

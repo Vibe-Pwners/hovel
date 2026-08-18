@@ -61,6 +61,8 @@ ordered slide data lives in `src/pages/index.astro`.
 
 | Command | Purpose |
 | --- | --- |
+| `aspect hovel-site` | Run the local site at `http://localhost:4321` with Astro hot-module reload. |
+| `aspect hovel-site preview` | Rebuild and serve the assembled Pages artifact at `http://localhost:4322`. |
 | `aspect hovel-check docs` | Test, assemble, and link-check the complete remote-compatible site. |
 | `aspect run //docs/tools/docs:stage_site` | Build the declared site from checked-in assets and materialize `_site/`. |
 | `aspect run //docs/tools/demo:materialize_docs_demo_outputs` | Host-only: regenerate standard/UI demos and refresh checked-in GIFs. |
@@ -97,6 +99,11 @@ On CI, `aspect hovel-report` produces the evidence-backed `_site/` tree before t
 `docs-site` artifact is uploaded. The Pages workflow promotes that exact
 artifact after the full CI workflow succeeds on `main`; it does not rerun the
 test suite. A manual Pages dispatch runs `aspect hovel-report` before upload.
+Every page also loads a hermetically generated source revision. An open hosted
+GitHub Pages tab checks that revision every 15 seconds and reloads after a newer
+successful deployment becomes visible. Local authoring uses `aspect hovel-site`
+and Astro HMR instead, so ordinary source edits update immediately without a
+full site assembly.
 
 Astro also owns `api/sdk/index.html` and `api/sdk/go/index.html`. Their card
 metadata is centralized in `src/lib/apiReferences.ts` and shared with search.

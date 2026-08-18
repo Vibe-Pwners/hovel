@@ -4,6 +4,25 @@ load(":site_rules.bzl", "sdk_docs_tree", "site_tree")
 
 package(default_visibility = ["//visibility:public"])
 
+py_binary(
+    name = "site_revision",
+    srcs = ["site_revision.py"],
+    main = "site_revision.py",
+    python_version = "PY3",
+)
+
+py_test(
+    name = "site_revision_test",
+    size = "small",
+    srcs = [
+        "site_revision.py",
+        "site_revision_test.py",
+    ],
+    imports = ["."],
+    main = "site_revision_test.py",
+    python_version = "PY3",
+)
+
 exports_files([
     "daemon_rpc_openapi_test.py",
     "provider_docs_parity_test.py",
@@ -60,6 +79,7 @@ py_binary(
     srcs = [
         "assemble_site.py",
         "check_site_links.py",
+        "site_revision.py",
     ],
     imports = ["."],
     main = "assemble_site.py",
@@ -76,23 +96,31 @@ site_tree(
 
 py_binary(
     name = "stage_site",
-    srcs = ["materialize_site.py"],
+    srcs = [
+        "materialize_site.py",
+        "site_revision.py",
+    ],
     args = [
         "--site=$(rootpath :site)",
     ],
     data = [":site"],
+    imports = ["."],
     main = "materialize_site.py",
     python_version = "PY3",
 )
 
 py_binary(
     name = "stage_site_with_report",
-    srcs = ["materialize_site.py"],
+    srcs = [
+        "materialize_site.py",
+        "site_revision.py",
+    ],
     args = [
         "--site=$(rootpath :site)",
         "--report-dir=.test-report/evidence",
     ],
     data = [":site"],
+    imports = ["."],
     main = "materialize_site.py",
     python_version = "PY3",
 )
@@ -114,6 +142,7 @@ py_test(
     srcs = [
         "materialize_site.py",
         "materialize_site_test.py",
+        "site_revision.py",
     ],
     imports = ["."],
     main = "materialize_site_test.py",

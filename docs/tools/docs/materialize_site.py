@@ -8,6 +8,8 @@ import re
 import shutil
 from pathlib import Path
 
+import site_revision
+
 
 REPORT_DIRECTORIES = ("data", "logs", "xml", "artifacts", "jobs", "coverage", "linters")
 
@@ -30,6 +32,8 @@ def main() -> int:
         report = resolve_workspace_path(workspace, args.report_dir)
         copy_report(report, destination / "reports/tests/latest")
         report_state = "generated evidence"
+
+    site_revision.refresh_tree(destination)
 
     version = published_version(destination / "index.html")
     print(f"docs site materialized: _site (version {version}, reports: {report_state})")

@@ -40,6 +40,7 @@ aspect hovel-check
           <li>Module packaging tests for in-repo example modules and workspace installation.</li>
           <li>Demo harness tests, including standard throw/session/MCP verification and the MCP agent demo harness.</li>
           <li>Shared throw-audit contract assertions reused by command mode, CLI, and MCP tests.</li>
+          <li>A real MCP transport contract invokes every canonical operator capability and compares the resulting command invocation with the independently constructed human invocation. This proves every agent route crosses the same application, daemon, policy, persistence, and audit boundary as its human counterpart.</li>
           <li>A generated agent–human operator parity matrix that fails on command, typed-tool, advertised-capability, risk annotation, or evidence drift.</li>
           <li>A fuzz smoke target for pure domain parsing behavior.</li>
         </ol>

@@ -28,7 +28,7 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
   <nav id={navigationId} aria-label={`${area === "book" ? "Book" : "Module"} navigation`}>
   {area === "book" && contentsPage && (
     <>
-      <a class="sidebar-contents" href={`${root}${contentsPage.href}`} aria-current={contentsPage.slug === current.slug ? "page" : undefined}>
+      <a class="sidebar-contents" href={`${root}spec/`} aria-current={contentsPage.slug === current.slug ? "page" : undefined}>
         <span>TOC</span>
         <strong>Book contents</strong>
       </a>
@@ -51,7 +51,7 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
   )}
   {area === "modules" && rootGroup && (
     <>
-      <a class="sidebar-contents" href={`${root}modules/index.html`} aria-current={current.slug === "modules/index" ? "page" : undefined}>
+      <a class="sidebar-contents" href={`${root}modules/`} aria-current={current.slug === "modules/index" ? "page" : undefined}>
         <span>DIR</span>
         <strong>Module directory</strong>
       </a>

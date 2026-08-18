@@ -3,14 +3,31 @@ package mcpadapter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/vibepwners/hovel/internal/adapters/daemonrpc"
 	"github.com/vibepwners/hovel/internal/app/commands"
 )
+
+type semanticContractDaemon struct {
+	Daemon
+	entity daemonrpc.OperatorEntity
+}
+
+func (d *semanticContractDaemon) HeartbeatEntity(_ context.Context, req daemonrpc.HeartbeatEntityRequest) (daemonrpc.EntityResponse, error) {
+	if req.Operation != nil {
+		d.entity.Operation = *req.Operation
+	}
+	if req.ActiveChain != nil {
+		d.entity.ActiveChain = *req.ActiveChain
+	}
+	return daemonrpc.EntityResponse{Entity: d.entity}, nil
+}
 
 func TestOperatorCapabilityRoutesCoverEveryHumanCapability(t *testing.T) {
 	capabilities, err := commands.HovelRegistry(commands.Runtime{}).OperatorCapabilities()
@@ -107,4 +124,108 @@ func TestGeneratedCapabilityToolBuildsValidatedCommandArguments(t *testing.T) {
 	if _, err := commandCapabilityArgs(definition, map[string]any{"name": 7}); err == nil {
 		t.Fatal("commandCapabilityArgs accepted a non-string positional")
 	}
+}
+
+func TestEveryOperatorCapabilityHasEquivalentHumanAndAgentInvocation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	invocations := make(chan commandRunInput, 1)
+	entity := daemonrpc.OperatorEntity{ID: "semantic-parity-contract", Kind: "agent", DisplayName: "Semantic parity contract"}
+	server := &Server{
+		daemon: &semanticContractDaemon{entity: entity},
+		entity: entity,
+		commandRunner: func(_ context.Context, input commandRunInput) (commandRunOutput, error) {
+			invocations <- input
+			return commandRunOutput{Args: append([]string(nil), input.Args...), ExitCode: 0, OK: true}, nil
+		},
+	}
+	serverTransport, clientTransport := mcpsdk.NewInMemoryTransports()
+	done := make(chan error, 1)
+	go func() { done <- server.MCPServer().Run(ctx, serverTransport) }()
+
+	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "semantic-parity-contract", Version: "v1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect MCP client: %v", err)
+	}
+
+	registry := commands.HovelRegistry(commands.Runtime{})
+	dedicated := map[commands.CapabilityID]bool{}
+	for _, route := range dedicatedOperatorCapabilityRoutes() {
+		dedicated[route.Capability] = true
+	}
+	for _, definition := range registry.Definitions() {
+		definition := definition
+		id := commands.CapabilityIDForPath(definition.Path)
+		t.Run(string(id), func(t *testing.T) {
+			input, humanArgs := semanticContractFixture(definition)
+			tool := semanticCapabilityToolName(id, dedicated[id])
+			result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{Name: tool, Arguments: input})
+			if err != nil {
+				t.Fatalf("CallTool(%s): %v", tool, err)
+			}
+			if result.IsError {
+				t.Fatalf("CallTool(%s) returned tool error: %#v", tool, result.Content)
+			}
+			select {
+			case agentInvocation := <-invocations:
+				if !reflect.DeepEqual(agentInvocation.Args, humanArgs) {
+					t.Fatalf("agent invocation = %#v, human invocation = %#v", agentInvocation.Args, humanArgs)
+				}
+			case <-ctx.Done():
+				t.Fatalf("waiting for %s invocation: %v", tool, ctx.Err())
+			}
+		})
+	}
+
+	if err := session.Close(); err != nil {
+		t.Fatalf("close MCP client: %v", err)
+	}
+	cancel()
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("MCP server returned error: %v", err)
+	}
+}
+
+// semanticContractFixture constructs the smallest valid human command line and
+// the equivalent typed MCP input independently. Exact argv equality is an
+// effects contract because both routes then enter the same command-mode
+// registry, application handlers, daemon session, policy, and audit path.
+func semanticContractFixture(definition commands.Definition) (map[string]any, []string) {
+	input := map[string]any{}
+	humanArgs := append([]string(nil), definition.Path...)
+	for index, positional := range definition.Positionals {
+		if !positional.Required {
+			continue
+		}
+		value := fmt.Sprintf("contract-%s-%d", positional.Name, index)
+		input[positional.Name] = value
+		humanArgs = append(humanArgs, value)
+	}
+	for index, option := range definition.Options {
+		if !option.Required {
+			continue
+		}
+		flag := "--" + option.Name
+		switch option.Kind {
+		case commands.OptionBool:
+			input[option.Name] = true
+			humanArgs = append(humanArgs, flag)
+		case commands.OptionStringList:
+			value := fmt.Sprintf("contract-%s-%d", option.Name, index)
+			input[option.Name] = []any{value}
+			humanArgs = append(humanArgs, flag, value)
+		default:
+			value := fmt.Sprintf("contract-%s-%d", option.Name, index)
+			input[option.Name] = value
+			humanArgs = append(humanArgs, flag, value)
+		}
+	}
+	if definition.Passthrough.Required {
+		value := "contract-" + definition.Passthrough.Name
+		input[definition.Passthrough.Name] = []any{value}
+		humanArgs = append(humanArgs, "--", value)
+	}
+	return input, humanArgs
 }

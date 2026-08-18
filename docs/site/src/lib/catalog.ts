@@ -172,7 +172,7 @@ function parsePage(sourcePath: string, raw: string): DocPage {
     body,
     description: candidate.description,
     group: candidate.group,
-    href: slug === "index" ? "index.html" : `${slug}.html`,
+    href: slug === "index" ? "index.html" : slug.endsWith("/index") ? `${slug.slice(0, -"index".length)}` : `${slug}.html`,
     moduleOrder: candidate.moduleOrder,
     moduleStatus: candidate.moduleStatus,
     moduleType: candidate.moduleType,

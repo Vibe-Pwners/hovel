@@ -1,0 +1,25 @@
+load(".aspect/helpers.axl", "run_aspect")
+
+def _impl(ctx: TaskContext) -> int:
+    root = ctx.std.env.aspect_root_dir()
+    mode = ctx.args.mode[0]
+    targets = {
+        "dev": "//docs/site:dev",
+        "preview": "//docs/tools/docs:preview_site",
+    }
+    if mode not in targets:
+        print("unknown site mode: " + mode)
+        return 2
+    if mode == "preview":
+        build = run_aspect(ctx, ["run", "//docs/tools/docs:stage_site"], root)
+        if build != 0:
+            return build
+    return run_aspect(ctx, ["run", targets[mode]], root)
+
+hovel_site = task(
+    args = {
+        "mode": args.positional(default = ["dev"], minimum = 0, maximum = 1, description = "Mode: dev (Astro HMR) or preview (assembled Pages site)."),
+    },
+    summary = "Serve the Hovel site with live refresh through Bazel-managed tools.",
+    implementation = _impl,
+)

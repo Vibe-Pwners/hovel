@@ -2,7 +2,7 @@ load("@aspect_rules_js//js:defs.bzl", "js_run_binary", "js_run_devserver")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//docs/site:astro/package_json.bzl", astro = "bin")
 load("@rules_python//python:defs.bzl", "py_test")
-load("//docs/tools/docs:site_rules.bzl", "publish_file")
+load("//docs/tools/docs:site_rules.bzl", "publish_file", "site_revision")
 load(":version.bzl", "site_version")
 
 package(default_visibility = ["//visibility:public"])
@@ -31,6 +31,23 @@ publish_file(
     source = "//docs/site/spec:reference/daemon-rpc.openapi.json",
 )
 
+site_revision(
+    name = "site_revision",
+    client_output = "public/assets/site-refresh.js",
+    generator = "//docs/tools/docs:site_revision",
+    revision_output = "public/assets/site-revision.json",
+    sources = glob([
+        "public/**",
+        "src/**",
+    ]) + [
+        "astro.config.mjs",
+        "package.json",
+        "tsconfig.json",
+        ":daemon_rpc_openapi",
+        ":version_file",
+    ],
+)
+
 filegroup(
     name = "site_sources",
     srcs = glob([
@@ -41,6 +58,7 @@ filegroup(
         "package.json",
         "tsconfig.json",
         ":daemon_rpc_openapi",
+        ":site_revision",
         ":version_file",
     ],
 )
@@ -86,6 +104,7 @@ js_run_devserver(
         ":node_modules/astro",
         ":site_sources",
     ],
+    env = {"BAZEL_BINDIR": "."},
     tool = ":astro_dev",
 )
 

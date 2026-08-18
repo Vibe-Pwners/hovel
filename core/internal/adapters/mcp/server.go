@@ -3103,13 +3103,11 @@ func OperatorCapabilityRoutes() []commands.AgentRoute {
 		panic(err)
 	}
 	for _, capability := range capabilities {
-		if dedicated[capability.ID] {
-			continue
-		}
 		routes = append(routes, commands.AgentRoute{
-			Tool:       capabilityToolName(capability.ID),
+			Tool:       semanticCapabilityToolName(capability.ID, dedicated[capability.ID]),
 			Capability: capability.ID,
 			Risk:       capability.Risk,
+			Evidence:   []string{"//internal/adapters/mcp:mcp_contract_test#TestEveryOperatorCapabilityHasEquivalentHumanAndAgentInvocation"},
 		})
 	}
 	return routes
@@ -3132,16 +3130,13 @@ func (s *Server) registerGeneratedCapabilityTools(server *mcpsdk.Server) {
 	}
 	for _, definition := range registry.Definitions() {
 		capability := byID[commands.CapabilityIDForPath(definition.Path)]
-		if dedicated[capability.ID] {
-			continue
-		}
 		annotations := destructiveTool(definition.Summary)
 		if capability.Risk == commands.CapabilityRead {
 			annotations = readOnlyTool(definition.Summary)
 		}
 		definition := definition
 		mcpsdk.AddTool(server, &mcpsdk.Tool{
-			Name:         capabilityToolName(capability.ID),
+			Name:         semanticCapabilityToolName(capability.ID, dedicated[capability.ID]),
 			Title:        definition.Summary,
 			Description:  definition.Summary + " This typed route uses the shared Hovel command registry and daemon-backed operator session.",
 			Annotations:  annotations,
@@ -3159,6 +3154,17 @@ func (s *Server) registerGeneratedCapabilityTools(server *mcpsdk.Server) {
 
 func capabilityToolName(id commands.CapabilityID) string {
 	return "hovel_" + strings.NewReplacer(".", "_", "-", "_").Replace(string(id))
+}
+
+// semanticCapabilityToolName preserves the original generated tool names and
+// gives capabilities with a hand-designed tool an additional command-specific
+// route. The latter is intentionally separate: it provides a uniform,
+// executable semantic contract without weakening the richer tool's schema.
+func semanticCapabilityToolName(id commands.CapabilityID, hasDedicatedRoute bool) string {
+	if hasDedicatedRoute {
+		return "hovel_command_" + strings.NewReplacer(".", "_", "-", "_").Replace(string(id))
+	}
+	return capabilityToolName(id)
 }
 
 func commandCapabilityInputSchema(definition commands.Definition) map[string]any {

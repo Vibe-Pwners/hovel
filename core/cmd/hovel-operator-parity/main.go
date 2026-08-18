@@ -127,5 +127,8 @@ func buildReport() (parityReport, error) {
 		report.Totals.TypedPercent = 100 * float64(report.Totals.Typed) / total
 		report.Totals.ContractRate = 100 * float64(report.Totals.Contracted) / total
 	}
+	if report.Totals.Contracted != report.Totals.Capabilities {
+		return parityReport{}, fmt.Errorf("operator semantic parity is incomplete: %d of %d capabilities are contracted", report.Totals.Contracted, report.Totals.Capabilities)
+	}
 	return report, nil
 }
