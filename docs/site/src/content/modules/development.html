@@ -38,8 +38,8 @@
       </tr>
       <tr>
         <td>Payload discovery, generation, reconnect, cleanup, and chunking</td>
-        <td>Go <code>PayloadProvider</code>; any language may still return installed-payload descriptors from normal execution</td>
-        <td>A Python or Rust payload-provider RPC implementation: those SDKs do not dispatch that provider surface today</td>
+        <td><code>hovel.payload/v1</code> optional operations in Go, Python, or Rust; legacy Go <code>PayloadProvider</code> implementations remain valid</td>
+        <td>Name-based orchestration or requiring unsupported optional operations</td>
       </tr>
       <tr>
         <td>Provider-owned nodes, routes, beacons, tasks, streams, or listening posts</td>
@@ -72,6 +72,8 @@
   <p>
     The complete lifecycle, packaging format, test loop, and safety contract are
     in <a href="../spec/module-development.html">Module Development</a>. The
+    payload-provider contract is in
+    <a href="../spec/payload-provider-development.html">Payload Providers</a>, and
     method-level message shapes are in the
     <a href="../spec/module-protocol.html">module wire protocol</a>.
   </p>
@@ -258,19 +260,19 @@ Content-Type: application/json
         <td><a href="../spec/module-python.html">Python</a></td>
         <td><code>HovelModule</code>, <code>run</code>, <code>serve</code></td>
         <td>Override supported Mesh/credential hooks; <code>connect_mesh_bridge</code>; <a href="../api/sdk/python/index.html">API reference</a></td>
-        <td>Supports <code>step.*</code>; no payload-provider RPC dispatch</td>
+        <td>Supports <code>step.*</code> and <code>hovel.payload/v1</code> optional dispatch</td>
       </tr>
       <tr>
         <td><a href="../spec/module-go.html">Go</a></td>
         <td><code>Module</code>, <code>Run</code>, <code>Serve</code></td>
         <td>Small optional Mesh/credential interfaces; <code>DialMeshBridge</code>; <a href="../api/sdk/go/hovel/index.html">API reference</a></td>
-        <td>Most complete provider surface, including steps and payload providers</td>
+        <td>Supports steps, legacy payload providers, and <code>hovel.payload/v1</code> optional interfaces</td>
       </tr>
       <tr>
         <td><a href="../spec/module-rust.html">Rust</a></td>
         <td><code>Module</code>, <code>run</code>, <code>serve</code></td>
         <td>Override supported trait methods; TCP/UDP bridge helpers; <a href="../api/sdk/rust/hovel/index.html">API reference</a></td>
-        <td>Mesh and credential dispatch are implemented; no <code>step.*</code> or payload-provider RPC dispatch</td>
+        <td>Mesh, credential, and <code>hovel.payload/v1</code> dispatch are implemented; no generic <code>step.*</code></td>
       </tr>
     </tbody>
   </table>

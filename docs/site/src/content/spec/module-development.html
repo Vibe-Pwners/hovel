@@ -402,9 +402,9 @@ CHECK   NAME                         MESSAGE
             </tr>
             <tr>
               <td>payload-provider helper types</td>
-              <td>installed-payload result helpers</td>
-              <td><code>PayloadProvider</code>, step, capability, and installed-payload types</td>
-              <td>installed-payload result helpers; provider dispatch not implemented yet</td>
+              <td><code>hovel.payload/v1</code> dataclasses and installed-payload result helpers</td>
+              <td>legacy <code>PayloadProvider</code>, optional v1 interfaces, and installed-payload types</td>
+              <td><code>hovel.payload/v1</code> structs and optional trait methods plus installed-payload helpers</td>
             </tr>
             <tr>
               <td>framed RPC contract tests</td>
@@ -457,7 +457,7 @@ hovel module install --link /home/me/dev/my-module</code></pre>
         <p>
           As with everything in this repo, go through <a href="https://aspect.build/docs/cli/">Aspect CLI</a>.
           The SDK and module slices are outside the core Bazel workspace, but the root
-          Task dispatcher already wires their integration builds, tests, CI gates, and
+          Aspect commands already wire their integration builds, tests, CI gates, and
           release packaging. Link editable module package roots while iterating.
         </p>
 <pre data-lang="shell"><code># Validate SDKs and example modules from a full source checkout

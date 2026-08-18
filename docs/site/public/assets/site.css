@@ -475,6 +475,21 @@ a:hover {
 .sidebar-part .sidebar-section {
   margin-top: 0;
 }
+.sidebar-part > summary.sidebar-section {
+  cursor: pointer;
+  list-style: none;
+}
+.sidebar-part > summary.sidebar-section::after {
+  content: "+";
+  margin-left: auto;
+  color: var(--cyan);
+}
+.sidebar-part[open] > summary.sidebar-section::after {
+  content: "−";
+}
+.sidebar-part > summary.sidebar-section::-webkit-details-marker {
+  display: none;
+}
 .sidebar-part a {
   display: grid;
   grid-template-columns: 1.65rem minmax(0, 1fr);

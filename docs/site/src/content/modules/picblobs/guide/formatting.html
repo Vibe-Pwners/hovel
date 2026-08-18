@@ -17,7 +17,7 @@ aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:lint
 aspect hovel-check modules
 
 # Optional C static analysis target
-task --dir modules/picblobs lint:c
+aspect hovel-check modules
 </code></pre>
   <p>
     Optional repository hooks can be installed with

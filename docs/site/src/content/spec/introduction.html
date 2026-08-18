@@ -17,8 +17,8 @@
           <li><code>hoveld</code> is mandatory; invoking <code>hovel</code> starts or attaches to a daemon.</li>
           <li>Modules run as bounded processes through normal module runtime contracts.</li>
           <li>Long-lived capabilities are represented in the target model; the current source validates service descriptors but does not launch general service processes.</li>
-          <li>Providers expose typed resources such as payloads, artifacts, facts, credentials, listeners, and sessions. The current implemented provider path is module RPC, especially Go payload-provider modules.</li>
-          <li>Payload providers return tagged bytes with minimal framework validation, and return explicit installed-payload descriptors when they install or reconnect target-side payloads.</li>
+          <li>Providers expose typed resources such as payloads, artifacts, facts, credentials, listeners, and sessions through optional module RPC contracts in Go, Python, and Rust.</li>
+          <li>Payload providers return <a href="payload-provider-development.html">versioned typed artifacts</a>; Hovel validates their content identity and stores explicit installed-payload descriptors for later reconnect and cleanup.</li>
           <li>Hovel core owns installed-payload persistence in SQLite; providers own reconnect and cleanup semantics.</li>
           <li>Throws emit structured events onto a shared logging rail consumed by every front end and persistence sink.</li>
           <li>The implementation is local-first: one workspace, one local daemon, explicit module installation, and Aspect-backed development workflows.</li>

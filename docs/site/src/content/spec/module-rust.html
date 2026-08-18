@@ -43,16 +43,16 @@ fn main() { hovel::serve(MyModule); }</code></pre>
           artifacts, interactive sessions, installed-payload result descriptors, all
           optional Mesh methods, all five typed credential-provider methods, and
           authenticated TCP/UDP Mesh bridge clients. It does not dispatch the generic
-          <code>step.*</code> methods or the full payload-provider RPC surface available
-          in Go.
+          <code>step.*</code> methods. It does dispatch the portable
+          <a href="payload-provider-development.html"><code>hovel.payload/v1</code></a>
+          payload-provider surface.
         </p>
         <p>
           Use Rust today for standalone survey or exploit modules where a compiled,
           dependency-free SDK binary is valuable, including Mesh and credential-aware
-          providers and modules that return installed-payload descriptors from
-          <code>run</code>. Use Go for payload-provider discovery, generation,
-          reconnect, and cleanup RPC. Use Go or Python for capability-native
-          <code>step.*</code> providers.
+          providers, payload providers, and modules that return installed-payload
+          descriptors from <code>run</code>. Use Go or Python when the module also
+          requires capability-native <code>step.*</code> dispatch.
         </p>
 
         <h2>TLS, workspace PKI, and Mesh bridges</h2>

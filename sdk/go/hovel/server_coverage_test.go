@@ -161,6 +161,16 @@ func TestServerDispatchesOptionalPayloadV1Surfaces(t *testing.T) {
 	}
 }
 
+func TestPayloadV1ArtifactReferenceWireShape(t *testing.T) {
+	encoded, err := json.Marshal(PayloadContent{Artifact: &PayloadArtifactContent{ArtifactID: "sha256:compat"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(encoded), `{"artifact":{"id":"sha256:compat"}}`; got != want {
+		t.Fatalf("payload artifact content = %s, want %s", got, want)
+	}
+}
+
 func TestServerPropagatesCredentialProviderFailures(t *testing.T) {
 	s := coverageServer(coverageRuntimeErrorModule{})
 	for _, method := range []string{

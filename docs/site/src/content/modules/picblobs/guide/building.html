@@ -2,7 +2,7 @@
 <article>
   <h1 id="building">Building</h1>
   <p>
-    Task is the public build interface. Its Bazel-backed targets use bzlmod and
+    Aspect CLI is the public build interface. Its Bazel-backed targets use bzlmod and
     fetch pinned Bootlin cross-compilation toolchains on first use. Run every
     command below from the repository root.
   </p>
@@ -22,7 +22,7 @@ aspect build --config=windows_x86_64 //modules/picblobs/src/payload:hello_window
   <pre data-lang="bash"><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --
 </code></pre>
   <p>
-    The Task invokes the declared Bazel materializer, which builds all supported
+    The Aspect command invokes the declared Bazel materializer, which builds all supported
     blobs, FreeBSD and Windows runners, and Linux <code>ul_exec</code> verifier
     fixtures. It then stages only declared outputs into the package trees and
     regenerates the runtime sidecar catalogue:

@@ -243,11 +243,14 @@ return hovel.Ok(
 
         <h2>Step and payload providers</h2>
         <p>
-          Go is the best-supported SDK for payload providers and capability-native
-          post-exploitation steps. Implement <code>StepProvider</code> when the module
-          should expose planner-visible steps; implement <code>PayloadProvider</code>
-          when it also owns payload discovery, generation, reconnect, cleanup, and
-          payload chunking.
+          Go supports both the legacy monolithic payload-provider interface and the
+          additive optional interfaces in
+          <a href="payload-provider-development.html"><code>hovel.payload/v1</code></a>.
+          Python and Rust expose equivalent v1 dispatch; use Go when its types fit the
+          module, not because the wire contract is language-specific. Implement
+          <code>StepProvider</code> for planner-visible post-exploitation steps. New
+          payload providers should implement <code>PayloadDescriber</code> and only the
+          optional operation interfaces they advertise.
         </p>
 <pre data-lang="go"><code>type StepProvider interface {
     hovel.Module
@@ -299,7 +302,7 @@ return hovel.Ok(
         </p>
 <p>
           The Go SDK and in-repo Go examples now live outside the core Bazel
-          workspace. The root Task dispatcher still exposes them through
+          workspace. Root Aspect commands still expose them through
           <code>aspect hovel-check sdk</code>, <code>aspect hovel-check sdk</code>,
           <code>aspect hovel-check modules</code>, and
           <code>aspect hovel-check modules</code>.

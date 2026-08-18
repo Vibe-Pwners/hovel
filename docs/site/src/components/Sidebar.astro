@@ -1,6 +1,6 @@
 ---
 import type { DocArea, DocPage } from "../lib/catalog";
-import { bookParts, moduleDocument, moduleSpaces, navGroups } from "../lib/catalog";
+import { bookChapter, bookParts, moduleDocument, moduleSpaces, navGroups } from "../lib/catalog";
 
 interface Props {
   area: Exclude<DocArea, "home">;
@@ -15,6 +15,7 @@ const label = (page: DocPage) => page.navTitle ?? page.title;
 const navigationId = `${area}-sidebar-navigation`;
 const contentsPage = area === "book" ? groups.flatMap((group) => group.pages).find((page) => page.slug === "spec/index") : undefined;
 const parts = area === "book" ? bookParts() : [];
+const currentChapter = area === "book" ? bookChapter(current) : undefined;
 const modules = area === "modules" ? moduleSpaces() : [];
 const currentModule = area === "modules" ? moduleDocument(current)?.module : undefined;
 ---
@@ -32,8 +33,8 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
         <strong>Book contents</strong>
       </a>
       {parts.map((part) => (
-        <section class="sidebar-part">
-          <p class="sidebar-section"><span>{String(part.number).padStart(2, "0")}</span>{part.label}</p>
+        <details class="sidebar-part" open={part.number === currentChapter?.partNumber}>
+          <summary class="sidebar-section"><span>{String(part.number).padStart(2, "0")}</span>{part.label}</summary>
           <ul>
             {part.chapters.map((chapter) => (
               <li>
@@ -44,7 +45,7 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       ))}
     </>
   )}

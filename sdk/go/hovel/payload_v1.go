@@ -70,7 +70,7 @@ type PayloadInlineContent struct {
 }
 
 type PayloadArtifactContent struct {
-	ArtifactID string `json:"artifactId"`
+	ArtifactID string `json:"id"`
 }
 
 type PayloadStreamContent struct {

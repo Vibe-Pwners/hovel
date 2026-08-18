@@ -1,100 +1,75 @@
-<!-- hovel-doc: {"title":"Development Guide","group":"Engineering","order":160,"navTitle":"Development Guide"} -->
+<!-- hovel-doc: {"title":"Development Guide","group":"Engineering","order":160,"navTitle":"Development Guide","description":"Aspect CLI entry points, hermetic Bazel ownership, repository slices, and the checks required before a Hovel change is complete."} -->
 <article>
-        <h1>Development Guide</h1>
-        <p>Hovel is developed as a monorepo with a sparse-checkout friendly layout. The core framework lives in its own build workspace, while SDKs, modules, and documentation live beside it. The root task system is the compatibility layer that lets contributors keep using stable commands from either a full checkout or a small Sapling checkout.</p>
+  <p class="book-kicker">// repository workflow</p>
+  <h1>Development Guide</h1>
+  <p class="book-lede">
+    Hovel is a Bazel monorepo operated through Aspect CLI. The checked-in
+    <code>.aspect/</code> commands compose pinned toolchains and declared targets so
+    contributors and CI use the same build graph.
+  </p>
 
-        <h2>Build Entry Point</h2>
-        <p>All local and automated build operations go through <code>task</code>. Contributors, CI, hooks, and automation do not call Bazel, gofmt, uv, rustfmt, clang-format, or Lefthook directly. If a workflow needs a new operation, add a Aspect-backed command and make that command own the tool invocation.</p>
-<pre data-lang="bash"><code>aspect help
-python3 repo-tools/tasks/checkout.py status
-aspect hovel-check
-aspect hovel-check
-</code></pre>
-        <p>The root <code>.aspect/</code> command configuration is intentionally small enough to stay present in every sparse checkout. It delegates into slice-local Bazel targets and keeps checkout detection in <code>repo-tools/tasks/checkout.py</code>.</p>
+  <div class="callout warning">
+    <strong>Use Aspect CLI as the only build entry point.</strong> Do not invoke
+    Bazel, gofmt, uv, rustfmt, clang-format, or Lefthook directly. Add or repair an
+    Aspect command or Bazel target when a workflow is missing.
+  </div>
 
-        <h2>Checkout Slices</h2>
-        <p>The partial-checkout model treats the repository as named slices. A contributor working on the daemon or CLI can check out <code>core/</code> plus the root dispatcher. A module author can check out <code>core/</code>, <code>sdk/</code>, and the specific module subtree they need.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Slice</th>
-              <th>Path</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>core</code></td>
-              <td><code>core/</code></td>
-              <td>Self-contained Go/Bazel workspace for the Hovel framework binary, daemon, CLI/TUI/MCP front ends, schemas, core tests, and core build tooling.</td>
-            </tr>
-            <tr>
-              <td><code>sdk</code></td>
-              <td><code>sdk/</code></td>
-              <td>Python, Go, and Rust module SDKs. SDKs are outside core so SDK work does not require framework internals beyond the public protocol contract.</td>
-            </tr>
-            <tr>
-              <td><code>modules</code></td>
-              <td><code>modules/</code></td>
-              <td>In-repo example modules, Squatter payload/provider code, module packaging tools, and lab helpers.</td>
-            </tr>
-            <tr>
-              <td><code>docs</code></td>
-              <td><code>docs/</code></td>
-              <td>Pages source, book content, terminal demos, generated API documentation tooling, and site assets.</td>
-            </tr>
-            <tr>
-              <td><code>repo-tools</code></td>
-              <td><code>repo-tools/</code></td>
-              <td>Small repository-level helpers used by the root Task dispatcher. This stays independent of the core build workspace.</td>
-            </tr>
-          </tbody>
-        </table>
+  <h2 id="commands">Everyday commands</h2>
+  <table>
+    <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>aspect hovel-check</code></td><td>Run the complete non-publishing gate for repository policy, core, SDKs, example modules, modules, and docs.</td></tr>
+      <tr><td><code>aspect hovel-check &lt;scope&gt;</code></td><td>Check one of <code>repo</code>, <code>core</code>, <code>sdk</code>, <code>module-examples</code>, <code>modules</code>, or <code>docs</code>.</td></tr>
+      <tr><td><code>aspect hovel-format</code></td><td>Format the wired Go, Python, Rust, and Squatter sources and refresh Gazelle metadata.</td></tr>
+      <tr><td><code>aspect hovel-report</code></td><td>Run report-producing tests and materialize the evidence-backed static site.</td></tr>
+      <tr><td><code>aspect hovel-release &lt;kind&gt;</code></td><td>Build, without publishing, <code>hovel</code>, <code>sdk</code>, <code>modules</code>, <code>picblobs</code>, or <code>picblobs-cli</code> artifacts.</td></tr>
+      <tr><td><code>aspect hovel &lt;mode&gt; -- …</code></td><td>Run the development CLI, daemon, MCP adapter, status, initialization, throw, or session workflow.</td></tr>
+      <tr><td><code>aspect build|test|run …</code></td><td>Address a declared Bazel target through the repository's selected configuration.</td></tr>
+    </tbody>
+  </table>
 
-        <h2>Core Boundary</h2>
-        <p><code>core/</code> is deliberately narrow: it contains only the code and build system needed to produce the Hovel Go binary and its front ends. That includes <code>cmd/hovel</code>, <code>internal</code>, <code>schemas</code>, platform declarations, pinned core build inputs, and core tests. It does not contain the language SDKs, in-repo modules, Squatter payload, documentation site, or demo materializers.</p>
-        <p>This boundary keeps a core checkout small and defensible. Core may define the daemon, application services, storage, protocol framing, and module runtime adapter interfaces. Modules and SDKs should depend on public descriptors and wire contracts instead of importing core internals. Test-only module implementations that are required by core tests live under <code>core/internal/testmodules</code>; the Python module runtime lives under <code>core/internal/moduleruntime</code> so it is clearly framework runtime code, not an in-repo module.</p>
+  <h2 id="slices">Repository slices</h2>
+  <table>
+    <thead><tr><th>Path</th><th>Owns</th><th>Focused gate</th></tr></thead>
+    <tbody>
+      <tr><td><code>core/</code></td><td>Daemon, front ends, domain, application services, storage, and core build tooling.</td><td><code>aspect hovel-check core</code></td></tr>
+      <tr><td><code>sdk/</code></td><td>Public Go, Python, and Rust module authoring contracts.</td><td><code>aspect hovel-check sdk</code></td></tr>
+      <tr><td><code>modules/examples/</code></td><td>Cross-language compatibility examples.</td><td><code>aspect hovel-check module-examples</code></td></tr>
+      <tr><td><code>modules/</code></td><td>Integrated modules, including Squatter and Picblobs.</td><td><code>aspect hovel-check modules</code></td></tr>
+      <tr><td><code>docs/</code></td><td>Book content, module manuals, generated API references, demos, and the static site.</td><td><code>aspect hovel-check docs</code></td></tr>
+    </tbody>
+  </table>
+  <p>
+    These are ownership boundaries, not permission to bypass the root build graph.
+    Cross-slice dependencies should use narrow public labels and public SDK or wire
+    contracts rather than importing core internals.
+  </p>
 
-        <h2>Check And CI</h2>
-        <p><code>aspect hovel-check</code> is partial-checkout tolerant. It detects the slices present in the working tree and runs each corresponding slice check. Missing optional slices are reported as skipped, not as failures.</p>
-<pre data-lang="text"><code>$ aspect hovel-check
-core: running aspect hovel-check core
-sdk: running aspect hovel-check sdk
-modules: running aspect hovel-check modules
-docs: running aspect hovel-check docs
-</code></pre>
-        <p><code>aspect hovel-check</code> is the remote-compatible full-checkout gate. It first verifies that the expected top-level slices are present, then runs repository policy, core, SDK, module, and docs verification gates. CI uses the same root tasks instead of calling Bazel, Go, Rust, Python, or docs tooling directly.</p>
-<pre data-lang="bash"><code>aspect hovel-check  # available-slice gate for sparse work
-aspect hovel-check     # full-checkout gate for every wired slice
-</code></pre>
-        <p>This distinction is deliberate: sparse work should be ergonomic, but a release or merge gate must not silently pretend an absent slice was validated. Missing slices are tolerated only by the sparse-aware aggregate; present slices run their real checks. Normal documentation builds consume reviewed GIFs from <code>docs/site/public/assets/demos/</code>; only the explicit <code>docs:demos...</code> refresh tasks cross the host-service boundary to drive tmux, Chrome, and, for the Wine recording, Docker.</p>
+  <h2 id="hermeticity">Hermetic tool ownership</h2>
+  <p>
+    Bazel owns build, lint, test, documentation, and demo tools whenever practical:
+    pinned archives, Python wheels, and Go, Rust, C, and cross-compilation toolchains.
+    Host services are reserved for real system boundaries such as Docker, Wine, tmux,
+    ttyd, or ffmpeg. Repository tooling that materializes generated output is a declared
+    Bazel-run program with explicit data dependencies.
+  </p>
 
-        <h2>Explicit Slice Tasks</h2>
-        <p>When you know what you are working on, call the slice task directly. Direct slice tasks fail if their own inputs are absent or broken.</p>
-<pre data-lang="bash"><code>aspect hovel-check core
-aspect build //core/cmd/hovel
-aspect test //core/internal/domain/...
-aspect hovel-check sdk
-aspect hovel-check sdk
-aspect hovel-check modules
-aspect hovel-check docs
-aspect run //docs/tools/docs:stage_site
-aspect hovel-check docs
-aspect hovel-release modules
-</code></pre>
-        <p><code>aspect hovel-check docs</code> is the remote-compatible docs test and assembly gate. <code>aspect run //docs/tools/docs:stage_site</code> builds and stages the same deterministic site from declared inputs, while <code>aspect hovel-check docs</code> composes both checks. Run <code>aspect run //docs/tools/demo:materialize_docs_demo_outputs</code>, <code>aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs</code>, or <code>aspect run //docs/tools/demo:materialize_all_demo_outputs</code> separately only when refreshing the checked-in recordings.</p>
-        <p>General tasks such as <code>aspect build</code>, <code>aspect test</code>, <code>aspect hovel-check core</code>, and <code>aspect test --coverage</code> dispatch to the core workspace because those names describe the Hovel binary workspace. <code>aspect hovel-format</code> formats the wired source slices. <code>aspect hovel-check</code> is the tolerant aggregate.</p>
+  <h2 id="done">Definition of done</h2>
+  <ol>
+    <li>Run the focused scope while iterating.</li>
+    <li>Run <code>aspect hovel-format</code> after source or import changes.</li>
+    <li>Run <code>aspect hovel-check</code> before considering a full-repository change complete.</li>
+    <li>For public SDK or module protocol changes, run <code>aspect hovel-report</code> and inspect the compatibility and branch-coverage evidence.</li>
+    <li>For docs-only changes, at minimum run <code>aspect hovel-check docs</code>; use the report command when the materialized site must contain current evidence.</li>
+  </ol>
 
-        <h2>Design Rules</h2>
-        <ol>
-          <li>Missing checkout slices are only tolerated by tolerant aggregate tasks.</li>
-          <li>Explicit tasks fail clearly when their required paths are absent.</li>
-          <li>Real build, test, lint, docs, or coverage failures are never converted into skips.</li>
-          <li>Root task names are stable. Directory moves should update slice detection and target lists without changing the everyday command contract.</li>
-          <li>CI and release tasks require the full checkout so published artifacts are built from the whole declared source tree.</li>
-        </ol>
-
-        <h2>Current Limitations</h2>
-        <p>The non-core slices share a root integration Bazel workspace so their checks can depend on the core workspace without moving SDKs, modules, or docs back under <code>core/</code>. That keeps sparse checkout boundaries clear, but it also means cross-slice labels should be treated as public integration points and kept narrow.</p>
-        <p>The module release package task currently stages Linux and Darwin compiled module launchers. The Windows Squatter payload remains covered by the Wine task and demo path, but Windows compiled module package launchers are not advertised until the MinGW cross-link path is made reliable for those targets.</p>
-      </article>
+  <h2 id="architecture">Design boundaries</h2>
+  <p>
+    Core follows inward dependencies: adapters and infrastructure call application
+    services, which call the pure domain. Front ends do not reach around application
+    services, and modules depend on public descriptors rather than internal packages.
+    Preserve defensive copies and constructor validation at boundaries. Changes to
+    throw planning, confirmation, dangerous-module checks, or audit events must retain
+    the safety rules in <a href="safety.html">Safety and Guardrails</a>.
+  </p>
+</article>

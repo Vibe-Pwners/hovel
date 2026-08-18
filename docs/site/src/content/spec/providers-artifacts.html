@@ -4,7 +4,8 @@
         <p>Providers let modules and chains ask for typed resources without hard-coding where those resources come from.</p>
         <p>
           In the current implementation, provider behavior is exposed through module RPC:
-          Go modules can implement <code>PayloadProvider</code>, Go and Python modules can
+          Go, Python, and Rust modules can implement <code>hovel.payload/v1</code> optional
+          payload operations, legacy Go modules can retain <code>PayloadProvider</code>, Go and Python modules can
           implement <code>step.*</code> providers, Go/Python/Rust modules can implement
           strongly typed optional credential and Mesh contracts, and any module can return
           explicit installed-payload descriptors. The SDK contexts do not expose a
@@ -17,7 +18,7 @@
           product role here, not a current SDK interface:</p>
         <ol>
           <li>Hovel core ingests module file-like outputs as artifacts and owns their hashes, metadata, and run associations; there is no exported <code>ArtifactProvider</code> SDK contract today.</li>
-          <li><code>PayloadProvider</code> resolves tagged bytes and returns typed payload results. Hovel core records hashes or artifact references and validates installed-payload reconnect descriptors before accepting them. The provider may eventually become the live-discovery source for richer payload catalogs. Today, <code>payloads available</code> projects configured payload-provider modules until live discovery is wired through the operator command.</li>
+          <li><a href="payload-provider-development.html"><code>hovel.payload/v1</code></a> resolves exact target/load variants and returns typed content. Hovel records immutable artifacts and validates installed-payload reconnect descriptors. The operator catalog still projects configured providers until live descriptor discovery is wired into that command.</li>
           <li><code>CredentialProvider</code> is a set of optional Go/Python/Rust module contracts: discovery, runtime material, protected files, provider encoding, and standard or advanced stamping. Each request is bound to an assignment, exact provider descriptor, and non-secret operation scope.</li>
           <li><code>MeshProvider</code> exposes typed discovery, topology, beacons, listeners, tasks, and streams; credential runtime/file delivery can run immediately before a consuming Mesh listener, task, or stream in the same provider process.</li>
           <li>The structured logging rail reports provider resolution and artifact creation, but is not itself a provider.</li>
@@ -174,89 +175,19 @@ CleanupHandle</code></pre>
         </table>
 
         <h2>Payload Provider</h2>
-        <p>Payload query:</p>
-<pre data-lang="yaml"><code>target: 10.0.0.42
-kind: pe
-platform: windows
-os: windows
-arch: x86
-format: pe-exe
-tags:
-  - pe
-  - windows
-transport: tcp-bind
-config:
-  lhost: 10.0.0.5
-  lport: "9101"
-capabilities:
-  - session.shell
-</code></pre>
-        <p>Payload metadata response:</p>
-<pre data-lang="yaml"><code>id: squatter/windows/x86/windows-7/tcp-bind/pe-exe
-name: Squatter TCP bind PE
-version: 0.1.0
-kind: pe
-platform: windows
-os: windows
-arch: x86
-minOS: Windows 7
-testedOS:
-  - Windows 7
-formats:
-  - pe-exe
-  - pe
-tags:
-  - pe
-  - windows
-capabilities:
-  - session.shell
-transport:
-  kind: tcp-bind
-  encrypted: false
-session:
-  kind: shell
-  acquisition: connect
-  requiresPreThrowListener: false
-  requiresPostThrowConnect: true
-  owner: provider
-</code></pre>
-        <p>Payload generation response:</p>
-<pre data-lang="yaml"><code>primary:
-  name: squatter.exe
-  role: primary
-  kind: pe
-  format: pe-exe
-  os: windows
-  arch: x86
-  tags:
-    - pe
-    - windows
-  encoding: base64
-  bytes: TVqQAAMAAAAEAAAA...
-  size: 123456
-  sha256: abc123
-artifacts: []
-</code></pre>
-        <p>Provider outputs are logically payload artifacts. An implementation may return inline base64 bytes or a provider handle that Hovel streams with <code>read_payload_chunk</code>.</p>
-        <p>Hovel performs minimal payload validation:</p>
-        <ol>
-          <li>Ensure bytes were returned.</li>
-          <li>Record declared kind, size, and hash.</li>
-          <li>Enforce configured size limits.</li>
-          <li>Persist or hash-track the bytes for audit.</li>
-          <li>Pass the bytes to the next module without parsing or proving the payload format.</li>
-        </ol>
         <p>
-          For core payload-provider modules such as <a href="squatter-payload-provider.html">Squatter</a>,
-          Hovel materializes provider-returned bytes into controlled workspace artifact paths
-          before exploit execution. Exploit modules receive typed payload metadata and local
-          paths, not raw bytes. This keeps storage location, deduplication, hashing, audit
-          metadata, and cleanup under Hovel's control while leaving payload internals opaque.
+          The canonical descriptor, content union, optional operations, language mappings,
+          and compatibility rules live in
+          <a href="payload-provider-development.html">Payload Provider Contract</a>.
+          Hovel materializes validated provider bytes into its immutable content-addressed
+          artifact store before exploit execution. The store is owner-only and plaintext;
+          payload artifact encryption at rest is not part of the contract.
         </p>
         <p>
-          Payload generation is per target. A provider may return multiple artifacts for one
-          target, but one artifact must be marked primary so consuming exploits can identify
-          the deliverable path.
+          Consumers receive typed artifact metadata and controlled local paths, not a
+          provider's internal storage location. Squatter and Picblobs demonstrate provider
+          behavior, but orchestration must select capabilities and operations rather than
+          branching on either module name.
         </p>
 
         <h2>Stamped Payloads</h2>
