@@ -35,6 +35,10 @@
               <td>Replayable execution of a reviewed chain against selected targets.</td>
             </tr>
             <tr>
+              <td><code>chain KV</code></td>
+              <td>Fresh, throw-local string handoff used by ordered modules. It is mutable only during that throw and becomes a read-only <code>chain-kv.json</code> artifact afterward.</td>
+            </tr>
+            <tr>
               <td><code>session</code></td>
               <td>Live post-exploitation stream owned by the daemon and reached through <code>session</code> commands.</td>
             </tr>
@@ -177,7 +181,7 @@ h0v3l [demo/mock-survey-exploit] &gt; chain validate</code></pre>
         <p><code>review</code>, <code>confirm</code>, and <code>throw</code> share the same planning path. <code>review</code> displays the plan and records a typed confirmation without execution. <code>confirm</code> records pre-confirmation and stops. <code>throw</code> starts execution after an existing confirmation, an inline typed <code>yes</code>, or an explicit <code>--now</code> bypass.</p>
 <pre data-lang="cli"><code>h0v3l [demo/mock-survey-exploit] &gt; review
 h0v3l [demo/mock-survey-exploit] &gt; throw</code></pre>
-        <p>A confirmation is tied to the reviewed plan. Changing steps, targets, or configuration changes the plan hash and requires another review.</p>
+        <p>A confirmation is tied to the reviewed plan. Changing steps, targets, configuration, or planned chain-KV bindings changes the plan hash and requires another review. A required dynamic binding means an earlier module must produce that key during this throw; Hovel never reuses a prior throw's snapshot.</p>
 
         <h2>Inspect Results</h2>
         <p>After a throw, inspect the durable records instead of treating terminal text as the source of truth.</p>
@@ -185,7 +189,8 @@ h0v3l [demo/mock-survey-exploit] &gt; throw</code></pre>
 h0v3l [demo/mock-survey-exploit] &gt; throw inspect &lt;throw-id&gt;
 h0v3l [demo/mock-survey-exploit] &gt; artifact list
 h0v3l [demo/mock-survey-exploit] &gt; artifact inspect &lt;artifact-id&gt;</code></pre>
-        <p>Use an artifact-producing mock exploit chain when demonstrating artifacts. The session-oriented mock exploit is better for session videos; the non-session mock exploit is better for findings and artifact inventory.</p>
+        <p>Every throw using the chain-KV runtime records a <code>chain-kv.json</code> artifact containing the final revision and string entries. It is read-only evidence: inspect it through the ordinary artifact commands, and start another throw to obtain a fresh empty store. The mock survey/exploit pair demonstrates this by publishing <code>survey/{target}/port</code> and reporting whether the exploit used explicit config or the surveyed value.</p>
+        <p>Use an artifact-producing mock exploit chain when demonstrating artifacts. The session-oriented mock exploit is better for session videos; the non-session mock exploit is better for findings, the KV handoff, and artifact inventory. See <a href="chain-kv.html">Chain KV Handoffs</a> for naming, limits, and module APIs.</p>
 
         <div class="demo-series">
           <figure class="demo-figure">

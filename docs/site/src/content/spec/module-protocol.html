@@ -117,6 +117,10 @@
 <pre data-lang="result"><code>{
   "chainConfig":  [ Requirement, ... ],
   "targetConfig": [ Requirement, ... ],
+  "chainKV": {
+    "produces": [{ "key": "survey/{target}/port", "description": "Discovered port" }],
+    "requires":  [{ "key": "survey/{target}/port", "configKey": "target.port", "required": true }]
+  },
   "outputs": {}
 }</code></pre>
 
@@ -813,7 +817,11 @@
   "target": "mock://host",
   "inputs": { "failure_mode": "" },
   "chainConfig":  { "operator.confirmed_lab": true },
-  "targetConfig": { "target.host": "example.test", "target.port": "443" }
+  "targetConfig": { "target.host": "example.test", "target.port": "443" },
+  "chainKV": {
+    "revision": 0,
+    "entries": {}
+  }
 }</code></pre>
 <pre data-lang="result"><code>{
   "status": "succeeded",             // or "failed"
@@ -822,13 +830,21 @@
   "artifacts": [ Artifact, ... ],
   "outputs":   { "facts": { "host": "example.test", "reachable": true } },
   "installedPayloads": [ InstalledPayloadDescriptor, ... ],
-  "sessions":  [ SessionRef, ... ]
+  "sessions":  [ SessionRef, ... ],
+  "chainKVMutations": {
+    "baseRevision": 0,
+    "operations": [{ "operation": "set", "key": "survey/{target}/port", "value": "443" }]
+  }
 }</code></pre>
         <p>
           While <code>execute</code> runs, the module may stream <code>module/log</code> and
           <code>module/session</code> notifications. The daemon resolves a configuration key
           by preferring per-run <code>inputs</code>, then <code>targetConfig</code>, then
-          <code>chainConfig</code>.
+          <code>chainConfig</code>. The optional <code>chainKV</code> snapshot is the live
+          throw state at the start of this run. The daemon applies
+          <code>chainKVMutations</code> atomically only for a successful result and only
+          when <code>baseRevision</code> still matches. Modules that omit these additive
+          fields retain their previous behavior.
         </p>
 
         <h3>session/write, session/read, session/close</h3>
@@ -897,6 +913,10 @@
 <pre data-lang="object"><code>{
   "chainConfig": [ Requirement, ... ],
   "targetConfig": [ Requirement, ... ],
+  "chainKV": {
+    "produces": [ ChainKVBinding, ... ],
+    "requires": [ ChainKVBinding, ... ]
+  },
   "outputs": {
     "facts": { "type": "object" }
   }
@@ -909,7 +929,8 @@
   "target": "mock://host",
   "inputs": { "failure_mode": "" },
   "chainConfig": { "operator.confirmed_lab": true },
-  "targetConfig": { "target.host": "example.test", "target.port": "443" }
+  "targetConfig": { "target.host": "example.test", "target.port": "443" },
+  "chainKV": { "revision": 3, "entries": { "survey/mock%3A%2F%2Fhost/port": "443" } }
 }</code></pre>
 
         <h3>ModuleResult</h3>
@@ -920,8 +941,30 @@
   "artifacts": [ Artifact, ... ],
   "outputs": {},
   "sessions": [ SessionRef, ... ],
-  "installedPayloads": [ InstalledPayloadDescriptor, ... ]
+  "installedPayloads": [ InstalledPayloadDescriptor, ... ],
+  "chainKVMutations": {
+    "baseRevision": 3,
+    "operations": [ ChainKVMutation, ... ]
+  }
 }</code></pre>
+
+        <h3>ChainKVBinding and ChainKVMutation</h3>
+<pre data-lang="object"><code>{
+  "key": "survey/{target}/port",
+  "description": "Discovered service port",
+  "configKey": "target.port",
+  "required": true
+}
+
+{ "operation": "set", "key": "survey/{target}/port", "value": "443" }
+{ "operation": "delete", "key": "survey/{target}/obsolete" }</code></pre>
+        <p>
+          <code>{target}</code> is replaced with the percent-encoded execution target in
+          contracts, reads, and mutations. Keys and values are strings. A mutation batch
+          is revision-bound and all-or-nothing; failed module results do not change the
+          store. The store is fresh for each throw and is sealed afterward as a read-only
+          artifact. See <a href="chain-kv.html">Chain KV Handoffs</a>.
+        </p>
 
         <h3>Requirement</h3>
 <pre data-lang="object"><code>{

@@ -43,7 +43,7 @@
     Validation accepts a required binding when explicit target or chain configuration is
     present or when an earlier module declares that output.
     A declared earlier producer creates a dynamic binding: execution still blocks the
-    consumer unless that producer actually commits the key during the current throw. This
+    consumer unless that producer actually commits the key during the current throw.
     Because every throw starts empty, stale findings cannot masquerade as fresh survey output. Undeclared writes are
     allowed for discovery and forward compatibility, but they do not satisfy declared
     ordering during planning.
@@ -88,6 +88,28 @@ SealChainKV(throwId) → chain-kv.json artifact</code></pre>
     intentional. Expected revisions provide optimistic concurrency and reject a stale
     writer. Begin and seal are coordinator operations; modules normally use only the SDK
     context supplied for their current run. A sealed store cannot be reopened or mutated.
+  </p>
+
+  <h2>Limits and artifact shape</h2>
+  <p>
+    Keys are limited to 256 bytes, values to 64 KiB, one mutation batch to 256
+    operations, and the complete live store to 8 MiB. Keys and values must be valid
+    UTF-8. Use a normal artifact for larger or binary content.
+  </p>
+<pre data-lang="json"><code>{
+  "schemaVersion": 1,
+  "throwId": "throw-uuid",
+  "operation": "demo",
+  "chain": "survey-then-exploit",
+  "revision": 1,
+  "entries": {
+    "survey/mock%3A%2F%2Frouter-01/port": "8443"
+  }
+}</code></pre>
+  <p>
+    Hovel records this snapshot as <code>chain-kv.json</code> with media type
+    <code>application/vnd.hovel.chain-kv+json</code>. It is evidence of that throw, not
+    input to a later throw.
   </p>
 
   <h2>Planning and safety</h2>

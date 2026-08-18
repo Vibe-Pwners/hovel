@@ -165,6 +165,41 @@ fn main() { hovel::serve(MockSurvey); }</code></pre>
           conversions.
         </p>
 
+        <h2>Pass survey findings to a later module</h2>
+        <p>
+          Override <code>chain_kv_contract</code>, then use the run context for
+          revision-bound string reads and mutations.
+        </p>
+<pre data-lang="rust"><code>fn chain_kv_contract(&amp;self) -&gt; Option&lt;ChainKVContract&gt; {
+    Some(ChainKVContract {
+        produces: vec![ChainKVBinding {
+            key: "survey/{target}/port".into(),
+            description: "Discovered service port".into(),
+            ..ChainKVBinding::default()
+        }],
+        ..ChainKVContract::default()
+    })
+}
+
+if ctx.chain_kv.available() {
+    if let Err(err) = ctx.chain_kv.set("survey/{target}/port", "8443") {
+        return Outcome::failed(&amp;err);
+    }
+}</code></pre>
+<pre data-lang="rust"><code>let (port, source) = ctx
+    .resolve_input("target.port", "survey/{target}/port")
+    .unwrap_or(("unknown".into(), "default"));
+ctx.info("resolved exploit port", &amp;[
+    ("port", Value::from(port.as_str())),
+    ("source", Value::from(source)),
+]);</code></pre>
+        <p>
+          Consumers declare the corresponding required <code>ChainKVBinding</code> with
+          <code>config_key: Some("target.port".into())</code>. Explicit invocation, target,
+          and chain configuration wins over KV data. See
+          <a href="chain-kv.html">Chain KV Handoffs</a>.
+        </p>
+
         <h2>Findings and artifacts</h2>
         <p>The <code>Outcome</code> builder chains with <code>with_*</code> methods.</p>
 <pre data-lang="rust"><code>fn run(&amp;self, ctx: &amp;mut Context) -&gt; Outcome {

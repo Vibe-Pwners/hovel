@@ -154,6 +154,39 @@ func main() { hovel.Serve(MockSurvey{}) }</code></pre>
           notifications.
         </p>
 
+        <h2>Pass survey findings to a later module</h2>
+        <p>
+          Implement the optional <code>ChainKVContractProvider</code> interface to make the
+          handoff visible to validation and planning. Producers stage string mutations
+          through <code>ctx.ChainKV()</code>; consumers use <code>ResolveInput</code> so
+          explicit configuration remains authoritative.
+        </p>
+<pre data-lang="go"><code>func (MockSurvey) ChainKVContract() hovel.ChainKVContract {
+    return hovel.ChainKVContract{Produces: []hovel.ChainKVBinding{{
+        Key: "survey/{target}/port", Description: "Discovered service port",
+    }}}
+}
+
+if ctx.ChainKV().Available() {
+    if err := ctx.ChainKV().Set("survey/{target}/port", "8443"); err != nil {
+        return hovel.Result{}, err
+    }
+}</code></pre>
+<pre data-lang="go"><code>func (MockExploit) ChainKVContract() hovel.ChainKVContract {
+    return hovel.ChainKVContract{Requires: []hovel.ChainKVBinding{{
+        Key: "survey/{target}/port", ConfigKey: "target.port", Required: true,
+    }}}
+}
+
+port := ctx.ResolveInput("target.port", "survey/{target}/port", "unknown")
+ctx.Log.Info("resolved exploit port", "port", port.Value, "source", port.Source)</code></pre>
+        <p>
+          <code>Set</code> and <code>Delete</code> commit atomically only after a successful
+          run. <code>Get</code> and <code>Exists</code> expand <code>{target}</code> too.
+          Checking <code>Available</code> preserves direct-test and older-runtime
+          compatibility. See <a href="chain-kv.html">Chain KV Handoffs</a>.
+        </p>
+
         <h2>Findings and artifacts</h2>
         <p>Build the result with functional options.</p>
 <pre data-lang="go"><code>func (MockExploit) Run(ctx *hovel.Context) (hovel.Result, error) {

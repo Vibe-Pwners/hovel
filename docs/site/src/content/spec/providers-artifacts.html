@@ -323,6 +323,7 @@ capabilities:
           <li>Plans.</li>
           <li>Listener captures.</li>
           <li>Session transcripts.</li>
+          <li>A throw's sealed <code>chain-kv.json</code> string handoff snapshot.</li>
         </ol>
         <p>Artifact metadata:</p>
 <pre data-lang="yaml"><code>id: artifact-uuid
@@ -336,6 +337,7 @@ sha256: abc123
 createdBy: module:ssh-memory
 </code></pre>
         <p>Artifact bytes should be content-addressed or hash-tracked. Small inline artifacts returned by modules should be materialized into the artifact store and recorded with metadata. Large file artifacts should be saved directly into the workspace artifact store, or into a configured artifact path, with only metadata and hashes in SQLite.</p>
+        <p>The daemon also creates <code>chain-kv.json</code> with media type <code>application/vnd.hovel.chain-kv+json</code> when it seals a throw's live chain KV. That artifact is immutable audit evidence and is never loaded into the next throw. See <a href="chain-kv.html">Chain KV Handoffs</a>.</p>
         <p>Resolved payload bytes should be persisted as artifacts or otherwise hash-tracked before module execution when practical. This makes throws replay-inspectable without requiring Hovel to understand the payload internals.</p>
 
         <h2>Session</h2>

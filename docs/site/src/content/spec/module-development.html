@@ -153,8 +153,8 @@
           To keep a Python, Go, and Rust implementation equivalent, define the module
           contract first, then port the same contract across SDKs. The contract is the
           tuple Hovel sees over RPC: <code>handshake</code> metadata, <code>schema</code>
-          requirements, <code>execute</code> inputs and result fields, optional sessions,
-          and optional installed-payload descriptors.
+          requirements, <code>execute</code> inputs and result fields, optional chain-KV
+          requirements and outputs, optional sessions, and optional installed-payload descriptors.
         </p>
         <ol>
           <li>Choose a stable module name, version, type, summary, tags, chain config, target config, and result shape. Keep these values identical except for language suffixes when you intentionally publish side-by-side examples such as <code>mock-survey</code>, <code>mock-survey-go</code>, and <code>mock-survey-rust</code>.</li>
@@ -181,6 +181,7 @@
           <li><strong>Stdout belongs to the protocol.</strong> Never print progress, banners, debug output, or child-process output to stdout. The daemon reads stdout as framed JSON-RPC. Use the SDK logger for operator-visible logs and stderr only for crash diagnostics.</li>
           <li><strong>Metadata paths must be boring.</strong> Catalog loading calls <code>handshake</code>, <code>schema</code>, optional <code>step.describe</code>, optional <code>mesh.describe</code>, and optional <code>credential.describe</code>. Those paths must be fast, deterministic, offline, and side-effect free: no target contact, listener startup, random prepared values, payload generation, credential resolution or creation, protected-file access, or filesystem mutation.</li>
           <li><strong>Configuration is explicit.</strong> Declare every operator-controlled value as a <code>Requirement</code>. Do not read arbitrary environment variables or hidden config files for target behavior unless the value is also surfaced in the schema or returned evidence.</li>
+          <li><strong>Cross-step strings use declared chain-KV bindings.</strong> Surveys declare the keys they produce; consumers declare required keys and an optional operator configuration override. Use <code>{target}</code> for target-specific findings, resolve explicit configuration before KV data, and never assume values survive into another throw. See <a href="chain-kv.html">Chain KV Handoffs</a>.</li>
           <li><strong>Use Hovel's log rail.</strong> Logs should be structured fields, not prose blobs. Log target host, stage, protocol, handle, and provider ids as fields so transcripts are searchable.</li>
           <li><strong>Return durable state deliberately.</strong> Facts belong in <code>outputs</code>, human/audit observations in <code>findings</code>, blobs in <code>artifacts</code>, live handles in <code>sessions</code>, and target-side payload inventory only in explicit <code>installedPayloads</code> descriptors.</li>
           <li><strong>Dangerous modules self-identify.</strong> If your module can crash a host, write disk, create accounts, install payloads, bind listeners, execute commands, or maintain access, tag it <code>dangerous</code> and add the confirmation requirements the operator must satisfy.</li>
