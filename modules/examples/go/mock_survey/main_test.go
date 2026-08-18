@@ -21,4 +21,8 @@ func TestMockSurveySchema(t *testing.T) {
 	if schema.TargetConfig[0].Key != "target.host" {
 		t.Fatalf("first requirement = %#v", schema.TargetConfig[0])
 	}
+	contract := MockSurvey{}.ChainKVContract()
+	if len(contract.Produces) != 1 || contract.Produces[0].Key != "survey/{target}/port" {
+		t.Fatalf("chain KV contract = %#v", contract)
+	}
 }

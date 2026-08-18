@@ -17,10 +17,15 @@ class MockSurvey(HovelModule):
         Requirement("target.host", "host", description="Target host name or IP address."),
         Requirement("target.port", "port", description="Target TCP port."),
     )
+    chain_kv_contract: ClassVar[dict[str, object]] = {
+        "produces": [{"key": "survey/{target}/port", "description": "TCP port confirmed by the survey."}],
+    }
 
     def run(self, ctx: Context) -> Result:
         host = ctx.input("target.host", ctx.target)
         port = ctx.input("target.port", "unknown")
+        if ctx.chain_kv.available:
+            ctx.chain_kv.set("survey/{target}/port", str(port))
         ctx.log.info("connecting to target %s:%s", host, port, extra={"host": host, "port": port})
         time.sleep(0.5)
         ctx.log.info("connected to target %s:%s, surveying ...", host, port, extra={"host": host, "port": port})

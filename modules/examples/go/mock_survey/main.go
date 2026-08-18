@@ -36,9 +36,20 @@ func (MockSurvey) Schema() hovel.Schema {
 	}
 }
 
+func (MockSurvey) ChainKVContract() hovel.ChainKVContract {
+	return hovel.ChainKVContract{Produces: []hovel.ChainKVBinding{{
+		Key: "survey/{target}/port", Description: "TCP port confirmed by the survey.",
+	}}}
+}
+
 func (MockSurvey) Run(ctx *hovel.Context) (hovel.Result, error) {
 	host := ctx.InputString("target.host", ctx.Target)
 	port := ctx.InputString("target.port", "unknown")
+	if ctx.ChainKV().Available() {
+		if err := ctx.ChainKV().Set("survey/{target}/port", port); err != nil {
+			return hovel.Result{}, err
+		}
+	}
 	ctx.Log.Info("connecting to target", "host", host, "port", port)
 	time.Sleep(500 * time.Millisecond)
 	ctx.Log.Info("connected to target, surveying ...", "host", host, "port", port)
