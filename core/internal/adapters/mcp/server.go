@@ -1091,6 +1091,10 @@ func (s *Server) chainApply(ctx context.Context, _ *mcpsdk.CallToolRequest, inpu
 }
 
 func (s *Server) commandRun(ctx context.Context, _ *mcpsdk.CallToolRequest, input commandRunInput) (*mcpsdk.CallToolResult, commandRunOutput, error) {
+	return s.commandRunWithPolicy(ctx, input, true)
+}
+
+func (s *Server) commandRunWithPolicy(ctx context.Context, input commandRunInput, enforceHumanOnly bool) (*mcpsdk.CallToolResult, commandRunOutput, error) {
 	if err := s.refresh(ctx); err != nil {
 		return nil, commandRunOutput{}, err
 	}
@@ -1100,6 +1104,9 @@ func (s *Server) commandRun(ctx context.Context, _ *mcpsdk.CallToolRequest, inpu
 	args := normalizeMCPCommandArgs(input.Args)
 	if len(args) == 0 {
 		return nil, commandRunOutput{}, errors.New("args are required")
+	}
+	if enforceHumanOnly && mcpCommandMutatesHumanOnlyPolicy(args) {
+		return nil, commandRunOutput{}, errors.New("launch-key policy changes are human-only; use the CLI, not MCP")
 	}
 	input.Args = args
 	if strings.TrimSpace(input.Operation) == "" {
@@ -1126,6 +1133,15 @@ func (s *Server) commandRun(ctx context.Context, _ *mcpsdk.CallToolRequest, inpu
 		out.Chain = strings.TrimSpace(input.Chain)
 	}
 	return nil, out, nil
+}
+
+func mcpCommandMutatesHumanOnlyPolicy(args []string) bool {
+	if len(args) < 3 {
+		return false
+	}
+	return strings.TrimSpace(args[0]) == "launch-key" &&
+		strings.TrimSpace(args[1]) == "policy" &&
+		strings.TrimSpace(args[2]) == "set"
 }
 
 func (s *Server) requireCommandOK(ctx context.Context, input commandRunInput) (commandRunOutput, error) {
@@ -3147,7 +3163,7 @@ func (s *Server) registerGeneratedCapabilityTools(server *mcpsdk.Server) {
 			if err != nil {
 				return nil, commandRunOutput{}, err
 			}
-			return s.commandRun(ctx, nil, commandRunInput{Args: args})
+			return s.commandRunWithPolicy(ctx, commandRunInput{Args: args}, false)
 		})
 	}
 }

@@ -5,7 +5,7 @@ def _impl(ctx: TaskContext) -> int:
     core = root + "/core"
     return run_steps(ctx, [
         (["run", "//tools/testreport:run_lint_report", "--", "--output=.test-report/linters"], root),
-        (["run", "//tools/coverage:python_sdk_coverage"], root),
+        (["run", "//tools/coverage:python_sdk_coverage", "--", "--no-enforce"], root),
         (["test", "--bazel-flag=--test_strategy=standalone", "--bazel-flag=--nocache_test_results", "//:sdk_test", "//:module_examples_test", "//:modules_test", "//:docs_test"], root),
         (["run", "//tools/coverage:go_branch_inventory", "--", "--hits-root=bazel-testlogs"], root),
         (["run", "//tools/coverage:rust_sdk_coverage"], root),

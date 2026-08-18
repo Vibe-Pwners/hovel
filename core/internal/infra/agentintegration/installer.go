@@ -538,6 +538,7 @@ func mergeOpenCodeConfig(path string, force bool) error {
 	if err := json.Unmarshal(normalized, &value); err != nil {
 		return fmt.Errorf("parse OpenCode config %s: %w", path, err)
 	}
+	_, hadMCP := value["mcp"]
 	mcp, ok := value["mcp"].(map[string]any)
 	if !ok && value["mcp"] != nil {
 		return fmt.Errorf("OpenCode config %s has a non-object mcp value", path)
@@ -555,7 +556,7 @@ func mergeOpenCodeConfig(path string, force bool) error {
 			return fmt.Errorf("OpenCode config %s already defines a different hovel MCP server; use --force to replace it", path)
 		}
 	}
-	updated, err := patchOpenCodeJSONC(body, standard, value["mcp"] != nil, hovelExists)
+	updated, err := patchOpenCodeJSONC(body, standard, hadMCP, hovelExists)
 	if err != nil {
 		return err
 	}

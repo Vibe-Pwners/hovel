@@ -133,6 +133,26 @@ func TestMergeOpenCodeConfigPreservesJSONCComments(t *testing.T) {
 	}
 }
 
+func TestMergeOpenCodeConfigAddsMissingMCPObject(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.json")
+	original := "{\n  \"model\": \"example\"\n}\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := mergeOpenCodeConfig(path, false); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"model": "example"`, `"mcp":`, `"hovel":`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("merged config missing %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestChecksumAndArchiveTraversal(t *testing.T) {
 	body := []byte("archive")
 	digest := sha256.Sum256(body)

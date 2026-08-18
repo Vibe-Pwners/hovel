@@ -409,7 +409,7 @@ func TestMCPCommandRunCarriesOperationAndChainContext(t *testing.T) {
 	}
 }
 
-func TestMCPCommandRunRoutesLaunchKeyPolicyMutationThroughSharedPolicy(t *testing.T) {
+func TestMCPCommandRunRejectsLaunchKeyPolicyMutation(t *testing.T) {
 	daemon := newFakeDaemon()
 	called := false
 	attached, err := Attach(context.Background(), daemon, OperatorOptions{
@@ -428,10 +428,10 @@ func TestMCPCommandRunRoutesLaunchKeyPolicyMutationThroughSharedPolicy(t *testin
 	_, out, err := attached.commandRun(context.Background(), nil, commandRunInput{
 		Args: []string{"hovel", "launch-key", "policy", "set", "all_connected"},
 	})
-	if err != nil {
-		t.Fatalf("commandRun returned error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "human-only") {
+		t.Fatalf("commandRun error = %v, want human-only policy rejection", err)
 	}
-	if !called || !out.OK {
+	if called || out.OK {
 		t.Fatalf("command runner called = %v, output = %#v", called, out)
 	}
 }

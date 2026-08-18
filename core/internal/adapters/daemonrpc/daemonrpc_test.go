@@ -2902,6 +2902,62 @@ func TestChainKVRPCIsFreshPerThrowAndUnavailableAfterSeal(t *testing.T) {
 	}
 }
 
+func TestChainKVRPCWithoutThrowUsesOperatorSession(t *testing.T) {
+	socketPath := shortTempDir(t) + "/hoveld.sock"
+	session := operatorsession.New()
+	if err := session.UseOperation("redteam-lab"); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.CreateChain("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	serveTestDaemon(t, socketPath, services.NewRunService(
+		mockexploit.Runner{},
+		discardEvents{},
+		&sequenceIDs{values: []string{"run-1"}},
+		fixedClock{now: time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)},
+	), WithSession(session), WithLogBroker(NewLogBroker()))
+
+	client, err := Dial(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestClient(t, client)
+	ctx := context.Background()
+	request := ChainKVRequest{Operation: "redteam-lab", Chain: "alpha", Key: "survey/port", Value: "445"}
+	set, err := client.SetChainKV(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Revision != 1 {
+		t.Fatalf("set revision = %d, want 1", set.Revision)
+	}
+	got, err := client.GetChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found || got.Value != "445" {
+		t.Fatalf("get = %#v", got)
+	}
+	listed, err := client.ListChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Prefix: "survey/", IncludeValues: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(listed.Entries, map[string]string{"survey/port": "445"}) {
+		t.Fatalf("list entries = %#v", listed.Entries)
+	}
+	if _, err := client.DeleteChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key}); err != nil {
+		t.Fatal(err)
+	}
+	missing, err := client.GetChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing.Found {
+		t.Fatalf("deleted key still present: %#v", missing)
+	}
+}
+
 func TestActiveLogsDoesNotPersistSnapshot(t *testing.T) {
 	socketPath := shortTempDir(t) + "/hoveld.sock"
 	runs := services.NewRunService(
