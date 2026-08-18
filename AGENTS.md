@@ -8,12 +8,35 @@ repository. (`CLAUDE.md` is a symlink to this file.)
 **Always invoke the build system through [Aspect CLI](https://aspect.build/cli)
 (`aspect <command>`). Never call `bazel`, `gofmt`, `uv`, or `lefthook` directly.**
 
-The `.aspect/` command configuration is the single source of truth for how the project is built,
-tested, linted, formatted, and run. CI, the git hooks, the docs, and you all go
-through it. If something cannot be done with an existing command, add or fix an
-AXL command rather than running the underlying tool ad hoc.
+The checked-in `.aspect/*.axl` files are the single source of truth for how the
+project is built, tested, linted, formatted, packaged, reported, and run. CI,
+the git hooks, the docs, and agents all go through them. `.aspect/version.axl`
+pins the supported Aspect CLI version. If something cannot be done with an
+existing command, add or fix an AXL command rather than running the underlying
+tool ad hoc.
 
 Run `aspect help` to see everything available.
+
+## How the Aspect command layer works
+
+- Top-level Hovel workflows are programmable AXL tasks: `hovel-check`,
+  `hovel-format`, `hovel`, `hovel-report`, `hovel-site`, `hovel-release`, and
+  `hovel-hooks`. Prefer these over spelling out their constituent targets.
+- The standard `aspect build`, `aspect test`, and `aspect run` tasks remain the
+  escape hatch for a narrow Bazel target that does not need a repository-level
+  workflow. Pass Bazel options with `--bazel-flag=...`; pass arguments to a run
+  target after `--`.
+- The repository contains a root Bazel workspace plus the nested `core`
+  workspace. AXL owns the correct working directory and target labels. Do not
+  translate `@hovel_core//...` labels or manually change directories to imitate
+  an AXL workflow.
+- CI automatically receives `--config=ci`. Local execution may select `local`,
+  `nativelink`, `nativelink-minimal`, or `buildbuddy` in
+  `.hovel-bazel-config`. `HOVEL_BAZEL_ARGS` overrides that selection, and
+  `HOVEL_BAZEL_STARTUP_ARGS` supplies startup flags. Do not bake a developer's
+  local cache or remote-execution choice into commands or BUILD files.
+- `aspect run` is configured to run from the Bazel workspace root so
+  materializers have a predictable working directory.
 
 ## Shell in the build graph
 
@@ -26,9 +49,9 @@ Docker entrypoints, or one-off lab operator scripts.
 When a check can be cached, model it as a Bazel target with explicit inputs and
 outputs instead of discovering files from shell at execution time. When a task
 must materialize generated artifacts back into the working tree (`_site/`,
-`docs/demo/out/`, `modules/examples/bin/`), prefer a `bazel run` Python
-materializer with declared data dependencies. Do not call `bazel` from helper
-scripts.
+`docs/demo/out/`, `modules/examples/bin/`), prefer an `aspect run` invocation of
+a Python materializer with declared Bazel data dependencies. Do not call Bazel
+from helper scripts.
 
 Build, test, lint, docs, and demo tools should be Bazel-managed execution
 inputs whenever practical: pinned archives, pip wheels, Go/Rust toolchains, or
@@ -46,33 +69,59 @@ or ffmpeg until they have a pinned execution toolchain.
 | `aspect build` | Build the core Hovel binary workspace. |
 | `aspect build @hovel_core//cmd/hovel` | Build the Hovel CLI target. |
 | `aspect test` | Run core Hovel binary workspace tests. |
-| `aspect test //internal/domain/...` | Run specific tests. |
-| `aspect hovel status` | Run a Hovel development command. |
-| `aspect hovel-check core` | Core Go formatting + golangci-lint + Gazelle checks (read-only). |
-| `aspect hovel-format` | Auto-format wired slices: core Go/Gazelle plus Go SDK sources. |
-| `aspect test --coverage` | Run core domain and application coverage ratchets. |
-| `python3 repo-tools/tasks/checkout.py status` | Show which repository slices are present. |
-| `aspect hovel-check` | Run checks for slices present in the current checkout. |
-| `aspect hovel-check` | Require a full checkout, then run the wired full gate. |
+| `aspect test @hovel_core//internal/domain/...` | Run specific core tests from the root workspace. |
+| `aspect hovel-check` | Run the full non-publishing gate: repo, core, SDKs, examples, modules, and docs. |
+| `aspect hovel-check <scope>` | Run one of `repo`, `core`, `sdk`, `module-examples`, `modules`, or `docs`. |
+| `aspect hovel-format` | Format all wired Go, Python, Rust, Gazelle, SDK, and module slices. |
+| `aspect test --coverage ...` | Collect coverage for explicitly selected test targets. Repository ratchets live in `hovel-check`. |
+| `aspect hovel <mode> [args]` | Run `cli`, `daemon`, `mcp`, `status`, `init`, `throw`, or `session` against the development workspace. |
 | `aspect run //docs/tools/docs:stage_site` | Build and materialize the docs site to `_site/`. |
 | `aspect hovel-check docs` | Build and validate the hermetic Astro docs artifact. |
-| `aspect run //docs/site:dev` | Run the Bazel-managed Astro development server on port 4321. |
-| `aspect run //docs/tools/docs:preview_site` | Serve the materialized `_site/` on port 4322. |
+| `aspect hovel-site` | Run Astro HMR on port 4321, including generated report evidence when present. |
+| `aspect hovel-site preview` | Rebuild the deterministic assembled site and serve `_site/` on port 4322. |
 | `aspect hovel-report` | Run report-producing tests and build `_site/` with the latest evidence. |
-| `aspect hovel cli` (`cli`) / `aspect hovel daemon` | Launch the interactive CLI / the daemon. |
-| `aspect hovel status` / `aspect hovel init` | Dev workspace status and initialization. |
+| `aspect hovel-release <kind>` | Build (without publishing) `hovel`, `sdk`, `modules`, `picblobs`, or `picblobs-cli` artifacts. |
+| `aspect hovel-hooks` | Install or refresh the repository hooks. |
 
 ## Definition of done
 
 Before considering a code change complete, run the strongest Aspect-backed gate
-available for the checked-out slices. For core changes, run **`aspect hovel-check`** from a
-full checkout or **`aspect hovel-check core`** from a core-only checkout. The wired gate
-currently covers core lint, build, tests, race, fuzz smoke, and coverage.
+available for the checked-out slices. Run **`aspect hovel-check`** from a full
+checkout. Use the narrowest applicable `aspect hovel-check <scope>` while
+iterating or when only that slice is present, and report which narrower gate was
+used. The core scope covers formatting checks, golangci-lint, Gazelle, build,
+tests, race, fuzz smoke, and coverage ratchets. The full gate additionally
+covers repository policy, all SDKs, module examples, modules, and docs.
 
 If you added, moved, or removed Go files or imports, run **`aspect hovel-format`** so
 `gofmt` and Gazelle-generated `BUILD.bazel` files are up to date; otherwise
 `aspect hovel-check core` will fail on the Gazelle diff check. When you add a new core test
 target, also add it to the `test_suite` in `core/BUILD.bazel`.
+
+## Compatibility contracts
+
+Hovel is working toward 1.0 without breaking any currently functioning module.
+Treat the existing module protocol and public Go, Python, and Rust SDK behavior
+as an essential backwards-compatibility contract:
+
+- A module that works against today's interfaces must continue to build,
+  connect, advertise capabilities, receive configuration, execute, and return
+  results while the 1.0 contracts are formalized.
+- Change scaffolding, adapters, and generated surfaces before changing module
+  source or public SDK shapes. Preserve wire names, prepared values, defaults,
+  optional behavior, error semantics, and defensive-copy boundaries.
+- Go-side and SDK-side compatibility branch ratchets and cross-language fixtures
+  are release evidence, not incidental unit tests. New public branches require
+  tests and must remain visible in the generated site report.
+- Human/agent operator parity is also a contract. Canonical capabilities are
+  registered and exercised semantically through the human command path and
+  typed MCP tools against the same daemon-owned application services. Adding a
+  human capability without an agent route, or bypassing typed MCP semantics via
+  a generic command escape hatch, is a parity regression.
+- Post-exploitation APIs must remain typed and capability-driven. Payload
+  artifacts, Mesh/PKI integration, exploit handoff, tasks, operations, and
+  session formation must preserve auditability and current provider behavior as
+  those contracts move toward versioned 1.0 surfaces.
 
 ## Docs authoring
 
@@ -129,9 +178,23 @@ HTML containing exactly one page-level `h1`:
   `_site/` materialization is required.
 - Test evidence is generated after Bazel finishes. Use `aspect hovel-report` when
   `_site/reports/tests/latest/` must contain the latest monorepo test report.
+- `aspect hovel-site` is the normal authoring command. It provides Astro HMR and
+  serves ambient `.test-report/evidence/` through development-only middleware
+  with `no-store` caching. After `aspect hovel-report`, refresh the report page
+  to read the new JSON, logs, XML, artifacts, coverage, and linter evidence. Do
+  not copy that evidence into `docs/site/public/`.
+- `aspect hovel-site preview` stages the deterministic checked-in site before
+  serving it; it intentionally does not attach ambient report evidence. Use the
+  `_site/` produced by `aspect hovel-report` when inspecting the exact
+  evidence-backed publication artifact.
 - The normal docs staging target is deterministic and does not consume ambient
   `.test-report/` files. Astro owns the report HTML; report builds attach only
   generated JSON, logs, XML, and artifacts.
+- Every assembled Pages artifact contains a deterministic site revision. An
+  open deployed page polls that same-origin revision and reloads after a newer
+  successful Pages deployment becomes visible. Local uncommitted changes still
+  require a commit, push, successful CI run, and Pages promotion before they can
+  affect the hosted site.
 - CI uploads the evidence-backed `_site/` from `aspect hovel-report` as the
   `docs-site` artifact. The Pages workflow promotes that exact artifact after a
   successful `main` CI run; manual Pages dispatches run the same Aspect contract.
