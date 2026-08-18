@@ -7,17 +7,18 @@ export interface DemoSlide {
 }
 
 interface Props {
+  chapter?: boolean;
   id?: string;
   slides: DemoSlide[];
 }
 
-const { id = "demo-carousel", slides } = Astro.props;
+const { chapter = true, id = "demo-carousel", slides } = Astro.props;
 if (slides.length === 0) throw new Error("DemoCarousel requires at least one slide");
 const serializedSlides = JSON.stringify(slides).replaceAll("<", "\\u003c");
 const first = slides[0];
 ---
 
-<demo-carousel class="demo-carousel" data-carousel-id={id} role="region" aria-roledescription="carousel" aria-label="Hovel operator workflow demos">
+<demo-carousel id={id} class:list={["demo-carousel", { "home-chapter": chapter }]} data-carousel-id={id} role="region" aria-roledescription="carousel" aria-label="Hovel operator workflow demos" tabindex="0">
   <section class="demo-carousel-panel" aria-labelledby={`${id}-title`}>
     <header class="demo-carousel-header">
       <div>
@@ -74,6 +75,7 @@ const first = slides[0];
         </button>
       ))}
     </div>
+    <p class="demo-carousel-hint">Use ← → or choose a step. Scroll down for the platform paths.</p>
   </section>
   <script type="application/json" data-carousel-slides set:html={serializedSlides}></script>
 </demo-carousel>

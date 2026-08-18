@@ -1,143 +1,131 @@
 <!-- hovel-doc: {"title":"Hovel - authorized red-team emulation framework","description":"A Go-hosted framework for authorized red-team emulation, controlled lab exercises, defensive validation, and operator workflow automation.","group":"Home","order":0} -->
-<section class="hero">
+<div class="hero" aria-labelledby="home-title">
+    <img src="assets/hovel.png" alt="hovel logo" class="hero-img">
     <div class="hero-text">
       <p class="hero-tag">// authorized security research</p>
-      <h1>Hovel</h1>
+      <h1 id="home-title">Hovel</h1>
       <p class="hero-lede">
         A Go-hosted framework for authorized red-team emulation, controlled lab
         exercises, defensive validation, and operator workflow automation.
       </p>
-      <p>
-        <a class="cta" href="spec/introduction.html">Read the book →</a>
+      <nav class="hero-actions" aria-label="Get started">
+        <a class="cta" href="spec/user-guide.html">Start operating →</a>
         <a class="cta ghost" href="spec/module-development.html">Write a module</a>
-      </p>
+        <a class="hero-secondary" href="spec/">Browse the book</a>
+      </nav>
+      <div class="hero-quickstart" aria-labelledby="hero-quickstart-title">
+        <div class="hero-quickstart-heading">
+          <span id="hero-quickstart-title">Quickstart</span>
+          <span>pipx or uvx</span>
+        </div>
+        <pre data-lang="bash"><code><span class="prompt">$</span> pipx install hovel
+<span class="prompt">$</span> hovel cli
+
+<span class="comment"># or run the latest release directly</span>
+<span class="prompt">$</span> uvx hovel@latest cli</code></pre>
+      </div>
     </div>
-    <img src="assets/hovel.png" alt="hovel logo" class="hero-img">
-  </section>
+    <a class="home-scroll-cue" href="#home-paths-title">Choose your path <span aria-hidden="true">↓</span></a>
+  </div>
 
   <div data-hovel-component="demo-carousel"></div>
 
-  <main class="content home-content">
-    <h2>The pitch</h2>
-    <blockquote>
-      <p>
-        As a red-team operator, I want one local engine to manage modules,
-        providers, Mesh operations, workspace PKI, throws, events, artifacts,
-        installed payloads, and sessions.
-      </p>
-      <p>
-        As an exploit developer or module author, I want a clear descriptor
-        and testable runtime contract so third-party capabilities are easy to
-        build, inspect, and operate safely.
-      </p>
-    </blockquote>
-
-    <h2>What is here</h2>
-    <p>
-      Hovel is a platform for wrapping and operating third-party proofs of concept,
-      not a catalog of first-party exploits. The project provides the engine, SDKs,
-      descriptors, providers, strongly typed credential delivery, guardrails,
-      examples, installed-payload inventory, and operator experience that make
-      third-party modules acceptable to run and inspect.
-    </p>
-    <p>
-      The central runtime is a local engine, <code>hoveld</code>, which owns
-      operations, chains, throws, module processes, provider-backed payload
-      state, Mesh listeners and bridges, encrypted PKI custody, installed
-      payload records, sessions, events, artifacts, and workspace storage.
-      Interactive <code>cli</code> mode, one-shot chain-file
-      execution, and the MCP agent front end are implemented clients over the
-      same application services. <code>hovel tui</code> is an explicit
-      not-implemented role. The daemon publishes a stable OpenAPI-described
-      local HTTP/JSON contract; a remotely authenticated REST deployment,
-      general managed-service processes, and richer MCP resources and prompts
-      remain future work.
-    </p>
-
-    <h2>Start here</h2>
-    <div class="tiles">
+  <section class="home-chapter home-paths content" aria-labelledby="home-paths-title">
+    <div class="home-chapter-heading">
+      <p class="home-chapter-kicker">// one engine, typed contracts</p>
+      <h2 id="home-paths-title">Choose your path</h2>
+      <p>Operate third-party capabilities safely, build compatible modules, or understand the platform beneath both.</p>
+    </div>
+    <div class="tiles journey-tiles">
       <a class="tile" href="spec/user-guide.html">
-        <span class="tile-label">00 // Use</span>
-        <span class="tile-title">User guide</span>
+        <span class="tile-label">Operate</span>
+        <span class="tile-title">Run Hovel safely</span>
         <span class="tile-desc">Run Hovel, throw a saved chain, build a chain interactively, inspect results, and operate sessions with generated demos.</span>
       </a>
-      <a class="tile" href="spec/introduction.html">
-        <span class="tile-label">01 // Read</span>
-        <span class="tile-title">Introduction</span>
-        <span class="tile-desc">What Hovel is, what is implemented, and what remains future work.</span>
-      </a>
-      <a class="tile" href="spec/architecture.html">
-        <span class="tile-label">02 // Read</span>
-        <span class="tile-title">Architecture</span>
-        <span class="tile-desc">Daemon contract, application services, command registry.</span>
-      </a>
-      <a class="tile" href="spec/modules-services.html">
-        <span class="tile-label">03 // Read</span>
-        <span class="tile-title">Modules &amp; services</span>
-        <span class="tile-desc">Runtime, lifecycle, Python SDK, protocol position.</span>
-      </a>
-      <a class="tile" href="spec/testing-roadmap.html">
-        <span class="tile-label">04 // Read</span>
-        <span class="tile-title">Testing strategy</span>
-        <span class="tile-desc">Aspect-backed local gates, CI jobs, test layers, and coverage goals.</span>
-      </a>
-      <a class="tile" href="spec/development-guide.html">
-        <span class="tile-label">05 // Build</span>
-        <span class="tile-title">Development guide</span>
-        <span class="tile-desc">Aspect entry points, hermetic checks, slice boundaries, and development decisions.</span>
-      </a>
-      <a class="tile" href="spec/index.html">
-        <span class="tile-label">// Full</span>
-        <span class="tile-title">Book index</span>
-        <span class="tile-desc">Every chapter, in order.</span>
-      </a>
-      <a class="tile" href="spec/safety.html">
-        <span class="tile-label">// Safety</span>
-        <span class="tile-title">Scope &amp; trust</span>
-        <span class="tile-desc">What Hovel is for, and what it is not.</span>
-      </a>
       <a class="tile" href="spec/module-development.html">
-        <span class="tile-label">// Build</span>
-        <span class="tile-title">Write a module</span>
-        <span class="tile-desc">Python, Go, and Rust SDKs over one stdio JSON-RPC protocol.</span>
+        <span class="tile-label">Extend</span>
+        <span class="tile-title">Build a compatible module</span>
+        <span class="tile-desc">Author and test modules with the Python, Go, or Rust SDK while preserving the shared runtime contract.</span>
       </a>
-      <a class="tile" href="spec/tls-pki.html">
-        <span class="tile-label">// Trust</span>
-        <span class="tile-title">TLS &amp; Workspace PKI</span>
-        <span class="tile-desc">Authorities, profiles, encrypted custody, trust sets, assignments, rotation, revocation, and post-quantum-hybrid TLS policy.</span>
+      <a class="tile" href="spec/introduction.html">
+        <span class="tile-label">Understand</span>
+        <span class="tile-title">Learn the platform</span>
+        <span class="tile-desc">Understand Hovel's scope, architecture, safety model, daemon, providers, Mesh, PKI, and operator interfaces.</span>
       </a>
-      <a class="tile" href="spec/tls-operations.html">
-        <span class="tile-label">// Operate</span>
-        <span class="tile-title">TLS Operations</span>
-        <span class="tile-desc">A start-to-finish runbook for issuing, assigning, delivering, rotating, revoking, and auditing certificates.</span>
-      </a>
-      <a class="tile" href="spec/mesh-development.html">
-        <span class="tile-label">// Route</span>
-        <span class="tile-title">Mesh Development</span>
-        <span class="tile-desc">Build the smallest useful provider, add listening posts, route ordinary modules, and consume assignment-bound TLS material.</span>
-      </a>
-      <a class="tile" href="modules/index.html">
-        <span class="tile-label">// Modules</span>
-        <span class="tile-title">Module catalogue</span>
-        <span class="tile-desc">Integrated module spaces with user guides, build notes, tests, and references.</span>
-      </a>
+    </div>
+    <p class="home-platform-summary">
+      <code>hoveld</code> owns operations, chains, providers, Mesh, PKI, payloads,
+      artifacts, sessions, and audit events. CLI, one-shot, and MCP clients use
+      the same application services and compatibility contracts.
+    </p>
+    <a class="home-scroll-cue" href="#home-ai">Connect an AI harness <span aria-hidden="true">↓</span></a>
+  </section>
+
+  <section id="home-ai" class="home-chapter home-ai content" aria-labelledby="home-ai-title">
+    <div class="home-chapter-heading">
+      <p class="home-chapter-kicker">// agent-native operations</p>
+      <h2 id="home-ai-title">Bring your AI harness</h2>
+      <p>Hovel exposes its operator surface through typed MCP tools, so agents work through the same daemon services, safety gates, and audit trail as human operators.</p>
+    </div>
+    <div class="home-ai-showcase">
+      <div class="home-ai-details">
+        <div class="home-ai-terminal">
+          <div class="hero-quickstart-heading"><span>Start the MCP server</span><span>stdio by default</span></div>
+          <pre data-lang="bash"><code><span class="prompt">$</span> hovel mcp --workspace .hovel
+
+<span class="comment"># repository development workspace</span>
+<span class="prompt">$</span> aspect hovel mcp</code></pre>
+          <a href="spec/mcp-agent.html">Read the agent and MCP contract →</a>
+        </div>
+        <div class="home-harnesses" aria-label="Supported MCP-capable AI harnesses">
+          <div><span>01</span><strong>Codex</strong></div>
+          <div><span>02</span><strong>Claude Code</strong></div>
+          <div><span>03</span><strong>OpenCode</strong></div>
+          <div><span>+</span><strong>Any MCP client</strong></div>
+        </div>
+      </div>
+      <figure class="home-ai-demo">
+        <div class="home-ai-demo-frame">
+          <img src="assets/demos/mcp-agent-01-throw.gif" alt="Hovel MCP server, CLI, and an AI agent operating the same throw workflow with structured tool calls and live logs.">
+        </div>
+        <figcaption><span>Live MCP workflow</span>Agent and human interfaces share one daemon-owned operation.</figcaption>
+      </figure>
+    </div>
+    <div class="home-ai-contract">
+      <span><strong>Shared state</strong>CLI and agents see the same operations, chains, artifacts, and sessions.</span>
+      <span><strong>Typed authority</strong>Planning, confirmation, dangerous-module gates, and policy remain enforced.</span>
+      <span><strong>Auditable parity</strong>Agent actions produce the same structured events and durable evidence.</span>
+    </div>
+    <a class="home-scroll-cue" href="#home-resources">Explore contracts and evidence <span aria-hidden="true">↓</span></a>
+  </section>
+
+  <section id="home-resources" class="home-chapter home-resources content" aria-labelledby="home-resources-title">
+    <div class="home-chapter-heading">
+      <p class="home-chapter-kicker">// contracts and proof</p>
+      <h2 id="home-resources-title">Reference and evidence</h2>
+      <p>Move from the product overview to exact interfaces, integrated modules, and generated compatibility evidence.</p>
+    </div>
+    <div class="tiles resource-tiles">
+      <a class="tile" href="spec/"><span class="tile-label">Book</span><span class="tile-title">All documentation</span><span class="tile-desc">Browse every chapter by part and reading order.</span></a>
+      <a class="tile" href="modules/"><span class="tile-label">Modules</span><span class="tile-title">Module catalogue</span><span class="tile-desc">Integrated modules, guides, build notes, tests, and references.</span></a>
       <a class="tile" href="api/sdk/index.html">
-        <span class="tile-label">// API</span>
-        <span class="tile-title">SDK API Reference</span>
+        <span class="tile-label">API</span>
+        <span class="tile-title">SDK reference</span>
         <span class="tile-desc">Generated Python, Go, and Rust SDK reference from source docs.</span>
       </a>
       <a class="tile" href="reports/tests/latest/index.html">
-        <span class="tile-label">// CI</span>
-        <span class="tile-title">Test Report</span>
-        <span class="tile-desc">Static Bazel test evidence with suite, target, case, log, XML, and artifact drilldown.</span>
+        <span class="tile-label">Evidence</span>
+        <span class="tile-title">Compatibility and test report</span>
+        <span class="tile-desc">Coverage, operator parity, suites, targets, logs, XML, and artifacts.</span>
       </a>
     </div>
-
-    <h2>Build it</h2>
-    <p>Everything goes through <a href="https://aspect.build/docs/cli/">Aspect CLI</a> — the single entry point. Run <code>aspect help</code> to see all commands.</p>
-    <pre data-lang="bash"><code>python3 repo-tools/tasks/checkout.py status
-aspect hovel-check   # available-slice gate for partial checkouts
-aspect build
-aspect test
-aspect hovel-check      # full-checkout guard plus wired core gate</code></pre>
-  </main>
+    <div class="home-build-strip">
+      <div>
+        <span class="tile-label">Build it</span>
+        <strong>One entry point through Aspect CLI.</strong>
+      </div>
+      <pre data-lang="bash"><code>aspect help
+aspect hovel-check
+aspect hovel status</code></pre>
+    </div>
+  </section>

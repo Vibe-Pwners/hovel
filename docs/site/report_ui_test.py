@@ -19,6 +19,21 @@ class ReportUITest(unittest.TestCase):
             self.assertIn(f'data-report-panel="{view}"', REPORT_JS)
         self.assertIn('event.key === "ArrowRight"', REPORT_JS)
         self.assertIn('event.key === "ArrowLeft"', REPORT_JS)
+        self.assertIn('event.key === "ArrowDown"', REPORT_JS)
+        self.assertIn('event.key === "ArrowUp"', REPORT_JS)
+
+    def test_report_uses_a_viewport_workspace_with_sidebar_navigation(self) -> None:
+        self.assertIn(
+            "grid-template-columns: minmax(11.5rem, 14rem) minmax(0, 1fr);",
+            REPORT_CSS,
+        )
+        self.assertIn("html.report-page body", REPORT_CSS)
+        self.assertIn("flex: 1 1 auto;", REPORT_CSS)
+        self.assertIn("overflow: hidden;", REPORT_CSS)
+        self.assertIn("overscroll-behavior: contain;", REPORT_CSS)
+        self.assertIn("position: sticky;", REPORT_CSS)
+        self.assertIn("flex-direction: column;", REPORT_CSS)
+        self.assertIn("grid-column: 2;", REPORT_CSS)
 
     def test_linters_follow_the_default_overview_with_logs_and_ignore_counts(self) -> None:
         linters_tab = REPORT_JS.index('viewTab("linters"')

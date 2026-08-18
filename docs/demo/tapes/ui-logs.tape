@@ -6,11 +6,11 @@ Set Shell bash
 Set FontSize 12
 Set Width 960
 Set Height 760
-Set TypingSpeed 10 ms
+Set TypingSpeed 20 ms
 Set Padding 18
 Set Framerate 20
 
 Type "$HOVEL_DEMO_UI_BIN show logs --width 96"
 Enter
 Wait+Screen /Completed chain mock-survey-exploit/
-Sleep 2000 ms
+Sleep 4000 ms

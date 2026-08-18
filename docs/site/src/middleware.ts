@@ -9,6 +9,7 @@ const directoryRoutes = new Map(
     .map((page) => [`/${page.slug.slice(0, -"/index".length)}`, `/${page.slug}`]),
 );
 const reportPrefix = "/reports/tests/latest/";
+const daemonOpenApiPath = "/spec/reference/daemon-rpc.openapi.json";
 const reportContentTypes: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
   ".log": "text/plain; charset=utf-8",
@@ -40,9 +41,28 @@ async function generatedReportResponse(pathname: string): Promise<Response | und
   }
 }
 
+async function sourceArtifactResponse(pathname: string): Promise<Response | undefined> {
+  const workspace = process.env.BUILD_WORKSPACE_DIRECTORY;
+  if (!workspace || pathname !== daemonOpenApiPath) return undefined;
+
+  try {
+    const body = await readFile(resolve(workspace, "docs/site/spec/reference/daemon-rpc.openapi.json"));
+    return new Response(body, {
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/json; charset=utf-8",
+      },
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const report = await generatedReportResponse(context.url.pathname);
   if (report) return report;
+  const sourceArtifact = await sourceArtifactResponse(context.url.pathname);
+  if (sourceArtifact) return sourceArtifact;
 
   const pathname = context.url.pathname.replace(/\/$/, "");
   const indexRoute = directoryRoutes.get(pathname);

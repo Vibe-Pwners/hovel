@@ -61,7 +61,11 @@ const slides: DemoSlide[] = [
   tag={`// v${__HOVEL_VERSION__}`}
   title={page.title}
 >
-  <Fragment set:html={sections[0]} />
-  <DemoCarousel id="home-demo" slides={slides} />
-  <Fragment set:html={sections[1]} />
+  <main id="main-content" class="home-main">
+    <section class="home-opening home-chapter" aria-label="Hovel introduction and operator workflow">
+      <Fragment set:html={sections[0]} />
+      <DemoCarousel id="home-demo" slides={slides} chapter={false} />
+    </section>
+    <Fragment set:html={sections[1]} />
+  </main>
 </PageShell>

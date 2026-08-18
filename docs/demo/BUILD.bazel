@@ -76,6 +76,18 @@ demo_manifest(
 )
 
 py_test(
+    name = "vhs_timing_test",
+    size = "small",
+    srcs = ["//docs/tools/demo:vhs_timing_test.py"],
+    data = glob([
+        "tapes/*.tape",
+        "tapes-docker/*.tape",
+    ]),
+    main = "vhs_timing_test.py",
+    python_version = "PY3",
+)
+
+py_test(
     name = "standard_verification_test",
     size = "small",
     srcs = ["//docs/tools/demo:verify_standard_demos.py"],

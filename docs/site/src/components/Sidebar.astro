@@ -22,7 +22,7 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
 
 <aside class="sidebar">
   <button class="sidebar-toggle" type="button" aria-controls={navigationId} aria-expanded="false">
-    <span>Browse {area === "book" ? "the book" : "modules"}</span>
+    <span><small>{area === "book" ? "Book navigation" : "Module navigation"}</small>{label(current)}</span>
     <span aria-hidden="true">+</span>
   </button>
   <nav id={navigationId} aria-label={`${area === "book" ? "Book" : "Module"} navigation`}>
@@ -33,7 +33,11 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
         <strong>Book contents</strong>
       </a>
       {parts.map((part) => (
-        <details class="sidebar-part" open={part.number === currentChapter?.partNumber}>
+        <details
+          class="sidebar-part"
+          open={part.number === currentChapter?.partNumber}
+          data-current-part={part.number === currentChapter?.partNumber ? "true" : undefined}
+        >
           <summary class="sidebar-section"><span>{String(part.number).padStart(2, "0")}</span>{part.label}</summary>
           <ul>
             {part.chapters.map((chapter) => (
@@ -98,6 +102,7 @@ const currentModule = area === "modules" ? moduleDocument(current)?.module : und
 
 <script>
   const sidebar = document.querySelector<HTMLElement>(".sidebar");
+  sidebar?.querySelector<HTMLDetailsElement>('[data-current-part="true"]')?.setAttribute("open", "");
   const toggle = sidebar?.querySelector<HTMLButtonElement>(".sidebar-toggle");
   toggle?.addEventListener("click", () => {
     const open = toggle.getAttribute("aria-expanded") !== "true";

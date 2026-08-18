@@ -8,7 +8,7 @@ Set Shell bash
 Set FontSize 11
 Set Width 1280
 Set Height 720
-Set TypingSpeed 10 ms
+Set TypingSpeed 20 ms
 Set Padding 12
 Set Framerate 20
 
@@ -23,7 +23,7 @@ Show
 Type "HOVEL_DEMO_AGENT_SCENARIO=squatter HOVEL_DEMO_AGENT_DELAY=520ms HOVEL_DEMO_AGENT_TOKEN_DELAY=28ms scripts/demo-mcp-agent-tmux.sh"
 Enter
 Wait+Screen@90s /Squatter responded/
-Sleep 2500 ms
+Sleep 4000 ms
 
 Hide
 Type "hovel_demo_teardown"

@@ -268,7 +268,7 @@
   "moduleExtensions": {
     "//core/tools/bzlmod:external_tools.bzl%external_tools": {
       "general": {
-        "bzlTransitiveDigest": "AH/0UpaujX9aGFS2XIqh9eSDOiaBd9to7+iYoGUUOm4=",
+        "bzlTransitiveDigest": "NqdoUt0uDDa+apaqNWlinlzVF99eclSjrfLPjp7NzHo=",
         "usagesDigest": "DiQN12Ie0gRzu20kjE1VlHQ4tELSNrBO/skd7+x/OIs=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"
@@ -321,11 +321,11 @@
           "ffmpeg_linux_x86_64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
             "attributes": {
-              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"ffmpeg_bin\",\n    srcs = [\"bin/ffmpeg\"],\n)\n",
-              "sha256": "8a3a9d2919b687602dfed430e0397779405589357e7108950e506a3291af9371",
-              "strip_prefix": "ffmpeg-n8.1.2-22-g94138f6973-linux64-gpl-8.1",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"ffmpeg_bin\",\n    srcs = [\"ffmpeg\"],\n)\n",
+              "sha256": "28268bf402f1083833ea269331587f60a242848880073be8016501d864bd07a5",
+              "strip_prefix": "ffmpeg-6.0.1-amd64-static",
               "urls": [
-                "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-10-13-44/ffmpeg-n8.1.2-22-g94138f6973-linux64-gpl-8.1.tar.xz"
+                "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-6.0.1-amd64-static.tar.xz"
               ]
             }
           },

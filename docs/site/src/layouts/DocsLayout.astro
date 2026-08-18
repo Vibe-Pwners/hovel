@@ -39,6 +39,12 @@ const documentTitle = chapter
   : moduleEntry
     ? `Module ${moduleEntry.document.label}: ${page.title}`
     : page.title;
+const sectionLabel = page.area === "book" ? "Book" : "Modules";
+const sectionHref = page.area === "book" ? "spec/" : "modules/";
+const contextLabel = chapter?.partLabel ?? moduleEntry?.module.label;
+const contextHref = moduleEntry && moduleEntry.module.overview.slug !== page.slug
+  ? moduleEntry.module.overview.href
+  : undefined;
 ---
 
 <PageShell
@@ -52,6 +58,7 @@ const documentTitle = chapter
   <div class="layout">
     <Sidebar area={page.area} current={page} root={root} />
     <main
+      id="main-content"
       class:list={[
         "content",
         (page.area === "book" || moduleEntry || isModuleDirectory) && "structured-content",
@@ -66,6 +73,27 @@ const documentTitle = chapter
       data-chapter-number={chapter?.label}
       data-module-number={moduleEntry?.document.label}
     >
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <a href={`${root}index.html`}>Home</a>
+        <span aria-hidden="true">/</span>
+        {page.slug === `${page.area === "book" ? "spec" : "modules"}/index`
+          ? <span aria-current="page">{sectionLabel}</span>
+          : <a href={`${root}${sectionHref}`}>{sectionLabel}</a>}
+        {contextLabel && (
+          <>
+            <span aria-hidden="true">/</span>
+            {contextHref
+              ? <a href={`${root}${contextHref}`}>{contextLabel}</a>
+              : <span aria-current={contextLabel === (page.navTitle ?? page.title) ? "page" : undefined}>{contextLabel}</span>}
+          </>
+        )}
+        {page.slug !== `${page.area === "book" ? "spec" : "modules"}/index` && (!contextLabel || contextLabel !== page.title) && (
+          <>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{page.navTitle ?? page.title}</span>
+          </>
+        )}
+      </nav>
       {(chapter || moduleEntry) && (
         <header class:list={["document-header", chapter && "book-chapter-header", moduleEntry && "module-document-header"]}>
           <span class="document-id">

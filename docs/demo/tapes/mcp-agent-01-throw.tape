@@ -7,7 +7,7 @@ Set Shell bash
 Set FontSize 11
 Set Width 1280
 Set Height 720
-Set TypingSpeed 10 ms
+Set TypingSpeed 20 ms
 Set Padding 12
 Set Framerate 20
 
@@ -22,7 +22,7 @@ Show
 Type "scripts/demo-mcp-agent-tmux.sh"
 Enter
 Wait+Screen@45s /HOVEL\/\/THROW/
-Sleep 1000 ms
+Sleep 4000 ms
 
 Hide
 Type "hovel_demo_teardown"

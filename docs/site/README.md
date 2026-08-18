@@ -62,18 +62,38 @@ ordered slide data lives in `src/pages/index.astro`.
 | Command | Purpose |
 | --- | --- |
 | `aspect hovel-site` | Run the local site at `http://localhost:4321` with Astro hot-module reload. |
+| `aspect hovel-site tidewave` | Run Astro HMR with Tidewave's localhost-only MCP endpoint at `/tidewave/mcp`. |
 | `aspect hovel-site preview` | Rebuild and serve the assembled Pages artifact at `http://localhost:4322`. |
 | `aspect hovel-check docs` | Test, assemble, and link-check the complete remote-compatible site. |
 | `aspect run //docs/tools/docs:stage_site` | Build the declared site from checked-in assets and materialize `_site/`. |
 | `aspect run //docs/tools/demo:materialize_docs_demo_outputs` | Host-only: regenerate standard/UI demos and refresh checked-in GIFs. |
 | `aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs` | Host-only: regenerate and refresh the Squatter Wine GIF. |
 | `aspect run //docs/tools/demo:materialize_all_demo_outputs` | Host-only: regenerate and refresh every checked-in demo GIF. |
-| `aspect run //docs/site:dev` | Run Astro through Bazel on `http://localhost:4321`. |
 | `aspect run //docs/tools/docs:preview_site` | Serve the assembled `_site/` on `http://localhost:4322`. |
 | `aspect hovel-report` | Run report-producing tests and build `_site/` with their evidence. |
 | `aspect run //repo-tools/deps:update_python_locks` | Refresh the pnpm and hashed Sphinx locks with Bazel-managed tools. |
 
+The two HMR modes run the Bazel-managed Astro binary with the working-tree
+`docs/site/` directory as its project root. Vite watches authoring files
+directly, so editing content, layouts, components, styles, or public assets does
+not require restarting the Aspect task. Restart after changing Bazel or AXL
+wiring, dependencies, or Astro startup configuration.
+
 Do not run Node, pnpm, Astro, or Bazel directly. Do not edit `_site/`.
+
+## Tidewave development
+
+Run `aspect hovel-site tidewave` to enable Tidewave alongside Astro HMR. Point
+an HTTP/streamable MCP client at `http://localhost:4321/tidewave/mcp`. Tidewave
+provides runtime evaluation, logs, browser evaluation, dependency-aware
+documentation, and source lookup; local source locations are reported relative
+to `docs/site/`.
+
+Tidewave is opt-in and development-only. Remote access is disabled even though
+Vite listens on all interfaces, the ordinary `aspect hovel-site` endpoint
+returns 404 for `/tidewave/mcp`, and static/Pages builds do not enable the
+plugin. Its temporary screenshots and recordings stay inside the Bazel-managed
+development tree.
 
 ## Refresh demo assets
 

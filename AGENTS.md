@@ -78,6 +78,7 @@ or ffmpeg until they have a pinned execution toolchain.
 | `aspect run //docs/tools/docs:stage_site` | Build and materialize the docs site to `_site/`. |
 | `aspect hovel-check docs` | Build and validate the hermetic Astro docs artifact. |
 | `aspect hovel-site` | Run Astro HMR on port 4321, including generated report evidence when present. |
+| `aspect hovel-site tidewave` | Run Astro HMR with the localhost-only Tidewave MCP endpoint at `/tidewave/mcp`. |
 | `aspect hovel-site preview` | Rebuild the deterministic assembled site and serve `_site/` on port 4322. |
 | `aspect hovel-report` | Run report-producing tests and build `_site/` with the latest evidence. |
 | `aspect hovel-release <kind>` | Build (without publishing) `hovel`, `sdk`, `modules`, `picblobs`, or `picblobs-cli` artifacts. |
@@ -183,6 +184,10 @@ HTML containing exactly one page-level `h1`:
   with `no-store` caching. After `aspect hovel-report`, refresh the report page
   to read the new JSON, logs, XML, artifacts, coverage, and linter evidence. Do
   not copy that evidence into `docs/site/public/`.
+- The HMR modes run the Bazel-managed Astro binary against the working-tree
+  `docs/site/` root. Ordinary content, component, layout, style, and public
+  asset edits are visible without restarting Aspect. Restart after changing
+  Bazel/AXL wiring, dependencies, or Astro startup configuration.
 - `aspect hovel-site preview` stages the deterministic checked-in site before
   serving it; it intentionally does not attach ambient report evidence. Use the
   `_site/` produced by `aspect hovel-report` when inspecting the exact

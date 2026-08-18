@@ -186,6 +186,7 @@ test_suite(
     name = "docs_test",
     tests = [
         "//docs/demo:standard_verification_test",
+        "//docs/demo:vhs_timing_test",
         "//docs/site:daemon_rpc_openapi_test",
         "//docs/site:provider_docs_parity_test",
         "//docs/site:report_ui_test",
