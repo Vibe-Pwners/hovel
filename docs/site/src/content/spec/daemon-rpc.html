@@ -190,6 +190,13 @@ Content-Type: application/json
             <tr><td>Operator session</td><td><code>AddTargetToSet</code></td><td>Add a target to a named target set.</td></tr>
             <tr><td>Operator session</td><td><code>RemoveTargetFromSet</code></td><td>Remove a target from a named target set.</td></tr>
             <tr><td>Operator session</td><td><code>AddModule</code></td><td>Add a module step to a chain and return the created step identifiers.</td></tr>
+            <tr><td>Throw runtime</td><td><code>BeginChainKV</code></td><td>Create a fresh, empty in-memory KV store for one throw.</td></tr>
+            <tr><td>Throw runtime</td><td><code>GetChainKV</code></td><td>Read one value from a live throw store.</td></tr>
+            <tr><td>Throw runtime</td><td><code>ListChainKV</code></td><td>List live throw keys, with values only when explicitly requested.</td></tr>
+            <tr><td>Throw runtime</td><td><code>SetChainKV</code></td><td>Set one live string value, optionally against an expected revision.</td></tr>
+            <tr><td>Throw runtime</td><td><code>DeleteChainKV</code></td><td>Delete one live key, optionally against an expected revision.</td></tr>
+            <tr><td>Throw runtime</td><td><code>ApplyChainKV</code></td><td>Atomically apply a successful module run's revision-bound mutation batch.</td></tr>
+            <tr><td>Throw runtime</td><td><code>SealChainKV</code></td><td>Return the final snapshot and permanently remove the mutable store; the throw coordinator persists it as a read-only artifact.</td></tr>
             <tr><td>Operator session</td><td><code>SetChainConfig</code></td><td>Set one chain-scoped configuration value.</td></tr>
             <tr><td>Operator session</td><td><code>UnsetChainConfig</code></td><td>Unset one chain-scoped configuration value.</td></tr>
             <tr><td>Operator session</td><td><code>SetTargetConfig</code></td><td>Set one target-scoped configuration value.</td></tr>

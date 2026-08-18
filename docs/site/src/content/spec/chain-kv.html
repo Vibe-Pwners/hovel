@@ -1,0 +1,108 @@
+<!-- hovel-doc: {"title":"Chain Key-Value Handoffs","group":"Module Development","order":8,"navTitle":"Chain KV Handoffs","description":"Pass fresh string findings between modules during one throw and retain the sealed snapshot as evidence."} -->
+<article>
+  <h1>Chain Key-Value Handoffs</h1>
+  <p>
+    Hovel provides a throw-owned string-key/string-value store for passing small findings
+    between ordered modules in one chain execution. Every throw starts with an empty store. A survey can stage writes during execution;
+    Hovel commits the complete mutation batch only when that run succeeds. A later exploit
+    reads the resulting chain snapshot or resolves an input from explicit configuration
+    first and the store second. Existing modules remain compatible because the wire fields,
+    SDK interfaces, and schema contract are additive and optional.
+  </p>
+
+  <h2>Scope and lifetime</h2>
+  <table>
+    <thead><tr><th>Property</th><th>Contract</th></tr></thead>
+    <tbody>
+      <tr><td>Scope</td><td>One throw, identified within its operation and chain. No other throw can see the live values.</td></tr>
+      <tr><td>Lifetime</td><td>Mutable in daemon memory only while the throw is active. Hovel seals the final snapshot as <code>chain-kv.json</code> when the throw ends, removes the live store, and never seeds a later throw from it.</td></tr>
+      <tr><td>Types</td><td>UTF-8 string keys and string values.</td></tr>
+      <tr><td>Atomicity</td><td>All mutations from a successful module run commit together against its input revision. Failed runs commit none.</td></tr>
+      <tr><td>Visibility</td><td>Live RPC calls require the throw ID. After sealing, values are available only through the read-only throw artifact.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Declare the handoff</h2>
+  <p>
+    A module may advertise <code>chainKV.produces</code> and
+    <code>chainKV.requires</code> in its schema. Each binding names a key and may name the
+    configuration key that overrides it. Use <code>{target}</code> in a key template for
+    per-target state; Hovel replaces it with the percent-encoded target string.
+  </p>
+<pre data-lang="json"><code>{
+  "chainKV": {
+    "produces": [
+      {"key": "survey/{target}/port", "description": "Discovered service port"}
+    ],
+    "requires": [
+      {"key": "survey/{target}/port", "configKey": "target.port", "required": true}
+    ]
+  }
+}</code></pre>
+  <p>
+    Validation accepts a required binding when explicit target or chain configuration is
+    present or when an earlier module declares that output.
+    A declared earlier producer creates a dynamic binding: execution still blocks the
+    consumer unless that producer actually commits the key during the current throw. This
+    Because every throw starts empty, stale findings cannot masquerade as fresh survey output. Undeclared writes are
+    allowed for discovery and forward compatibility, but they do not satisfy declared
+    ordering during planning.
+  </p>
+
+  <h2>Resolve configuration predictably</h2>
+  <p>
+    SDK helpers resolve a value in this order: invocation inputs, target configuration,
+    chain configuration, chain KV, then the supplied default. This keeps operator intent
+    authoritative while allowing a survey to fill values the operator did not provide.
+  </p>
+<pre data-lang="go"><code>resolution := ctx.ResolveInput(
+    "target.port",
+    "survey/{target}/port",
+    "445",
+)
+
+if err := ctx.ChainKV().Set("survey/{target}/port", "445"); err != nil {
+    return hovel.Result{}, err
+}</code></pre>
+<pre data-lang="python"><code>port, source, found = ctx.resolve_input(
+    "target.port",
+    "survey/{target}/port",
+    "445",
+)
+ctx.chain_kv.set("survey/{target}/port", "445")</code></pre>
+<pre data-lang="rust"><code>let resolution = ctx
+    .resolve_input("target.port", "survey/{target}/port")
+    .unwrap_or(("445".into(), "default"));
+ctx.chain_kv.set("survey/{target}/port", "445")?;</code></pre>
+
+  <h2>Operate and inspect the store</h2>
+<pre data-lang="text"><code>BeginChainKV(throwId, operation, chain)
+GetChainKV(throwId, key)
+ListChainKV(throwId, prefix, includeValues)
+SetChainKV(throwId, key, value, expectedRevision?)
+DeleteChainKV(throwId, key, expectedRevision?)
+ApplyChainKV(throwId, expectedRevision, mutations)
+SealChainKV(throwId) → chain-kv.json artifact</code></pre>
+  <p>
+    Listing returns keys only by default; add <code>--include-values</code> when disclosure is
+    intentional. Expected revisions provide optimistic concurrency and reject a stale
+    writer. Begin and seal are coordinator operations; modules normally use only the SDK
+    context supplied for their current run. A sealed store cannot be reopened or mutated.
+  </p>
+
+  <h2>Planning and safety</h2>
+  <p>
+    A throw plan records the resolved binding source for each target. Its KV revision is
+    initially zero because plans never consult artifacts from earlier throws.
+    These fields participate in the plan hash, so changing the plan invalidates its prior
+    confirmation. Plans warn when execution depends on dynamic survey output, but use the
+    normal review and confirmation flow; KV support never bypasses dangerous-module policy,
+    peer approval, or the persisted plan requirement.
+  </p>
+  <p>
+    Keep values small and purpose-specific. Use artifacts for files and large evidence,
+    sessions for interactive access, and typed capabilities for richer provider contracts.
+    The KV store is intentionally a coordination primitive, not a secret manager or an
+    unbounded document database.
+  </p>
+</article>

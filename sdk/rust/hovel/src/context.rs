@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::io::{self, Write};
 
+use crate::chain_kv::ChainKV;
 use crate::framing::write_message;
 use crate::json::Value;
 use crate::session::{Session, SessionOptions, SessionRef};
@@ -254,6 +255,7 @@ pub struct Context<'a> {
     pub chain_config: Value,
     pub target_config: Value,
     pub agent: Option<Value>,
+    pub chain_kv: ChainKV,
     module_name: String,
     emitter: &'a mut Emitter,
 }
@@ -279,6 +281,7 @@ impl<'a> Context<'a> {
             chain_config: object("chainConfig"),
             target_config: object("targetConfig"),
             agent: params.get("agentContext").cloned(),
+            chain_kv: ChainKV::from_params(&field("target"), params),
             module_name: module_name.to_string(),
             emitter,
         }
@@ -309,6 +312,21 @@ impl<'a> Context<'a> {
             Some(Value::Bool(b)) => b.to_string(),
             _ => default.to_string(),
         }
+    }
+
+    pub fn resolve_input(&self, config_key: &str, kv_key: &str) -> Option<(Value, &'static str)> {
+        for (source, name) in [
+            (&self.inputs, "input"),
+            (&self.target_config, "target-config"),
+            (&self.chain_config, "chain-config"),
+        ] {
+            if let Some(value) = source.get(config_key) {
+                return Some((value.clone(), name));
+            }
+        }
+        self.chain_kv
+            .get(kv_key)
+            .map(|value| (Value::from(value), "chain-kv"))
     }
 
     /// Emits a structured log record at the given level.

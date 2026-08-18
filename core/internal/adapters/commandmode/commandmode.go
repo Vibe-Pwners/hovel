@@ -25,6 +25,7 @@ import (
 	"github.com/vibepwners/hovel/internal/app/commands"
 	"github.com/vibepwners/hovel/internal/app/modulecatalog"
 	"github.com/vibepwners/hovel/internal/app/operatorlog"
+	"github.com/vibepwners/hovel/internal/app/operatorsession"
 	apppki "github.com/vibepwners/hovel/internal/app/pki"
 	"github.com/vibepwners/hovel/internal/app/services"
 	"github.com/vibepwners/hovel/internal/domain/daemon"
@@ -1365,6 +1366,11 @@ type daemonRunClient struct {
 	client *daemonrpc.Client
 }
 
+func (c daemonRunClient) GetChainKV(ctx context.Context, operation, chain, key string) (string, bool, uint64, error) {
+	response, err := c.client.GetChainKV(ctx, daemonrpc.ChainKVRequest{Operation: operation, Chain: chain, Key: key})
+	return response.Value, response.Found, response.Revision, err
+}
+
 func pkiRPCContext(scope commands.PKIRequestScope) daemonrpc.PKIRequestContext {
 	return daemonrpc.PKIRequestContext{
 		ActorID: scope.ActorID, OperationID: scope.OperationID, CorrelationID: scope.CorrelationID,
@@ -1521,6 +1527,7 @@ func (c daemonRunClient) Close() error {
 
 func (c daemonRunClient) RunMockExploit(ctx context.Context, req commands.RunMockExploitRequest) (commands.RunMockExploitResponse, error) {
 	result, err := c.client.RunMockExploit(ctx, daemonrpc.RunMockExploitRequest{
+		ThrowID:      req.ThrowID,
 		Operation:    req.Operation,
 		Chain:        req.Chain,
 		ModuleID:     req.ModuleID,
@@ -1534,17 +1541,29 @@ func (c daemonRunClient) RunMockExploit(ctx context.Context, req commands.RunMoc
 		return commands.RunMockExploitResponse{}, err
 	}
 	return commands.RunMockExploitResponse{
-		RunID:             result.RunID,
-		ModuleID:          result.ModuleID,
-		Target:            result.Target,
-		State:             result.State,
-		Summary:           result.Summary,
-		Findings:          findingsFromRPC(result.Findings),
-		Artifacts:         artifactsFromRPC(result.Artifacts),
-		Logs:              logsFromRPC(result.Logs),
-		Sessions:          sessionsFromRPC(result.Sessions),
-		InstalledPayloads: installedPayloadsFromRun(result.InstalledPayloads),
+		RunID:              result.RunID,
+		ModuleID:           result.ModuleID,
+		Target:             result.Target,
+		State:              result.State,
+		Summary:            result.Summary,
+		Findings:           findingsFromRPC(result.Findings),
+		Artifacts:          artifactsFromRPC(result.Artifacts),
+		Logs:               logsFromRPC(result.Logs),
+		Sessions:           sessionsFromRPC(result.Sessions),
+		InstalledPayloads:  installedPayloadsFromRun(result.InstalledPayloads),
+		ChainKVRevision:    result.ChainKVRevision,
+		ChainKVMutatedKeys: append([]string(nil), result.ChainKVMutatedKeys...),
 	}, nil
+}
+
+func (c daemonRunClient) BeginChainKV(ctx context.Context, throwID, operation, chain string) error {
+	_, err := c.client.BeginChainKV(ctx, daemonrpc.ChainKVLifecycleRequest{ThrowID: throwID, Operation: operation, Chain: chain})
+	return err
+}
+
+func (c daemonRunClient) SealChainKV(ctx context.Context, throwID, operation, chain string) (operatorsession.ChainKVSnapshot, error) {
+	result, err := c.client.SealChainKV(ctx, daemonrpc.ChainKVLifecycleRequest{ThrowID: throwID, Operation: operation, Chain: chain})
+	return operatorsession.ChainKVSnapshot{Revision: result.Revision, Entries: result.Entries}, err
 }
 
 func (c daemonRunClient) ListPayloadCommands(ctx context.Context, moduleID string, req commands.RunPayloadCommandListRequest) ([]commands.PayloadCommand, error) {

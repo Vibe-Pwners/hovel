@@ -341,7 +341,11 @@ func NewRunService(
 }
 
 func (s RunService) ExecuteMockExploit(ctx context.Context, req ExecuteMockExploitRequest) (run.Result, error) {
-	return s.ExecuteModule(ctx, ExecuteModuleRequest(req))
+	return s.ExecuteModule(ctx, ExecuteModuleRequest{
+		Operation: req.Operation, Chain: req.Chain, ModuleID: req.ModuleID,
+		Target: req.Target, Inputs: req.Inputs, ChainConfig: req.ChainConfig,
+		TargetConfig: req.TargetConfig, ThrowStarted: req.ThrowStarted,
+	})
 }
 
 type ExecuteModuleRequest struct {
@@ -353,6 +357,7 @@ type ExecuteModuleRequest struct {
 	ChainConfig  map[string]string
 	TargetConfig map[string]string
 	ThrowStarted time.Time
+	ChainKV      *run.ChainKVSnapshot
 }
 
 type PayloadCommandListRequest struct {
@@ -958,6 +963,7 @@ func (s RunService) ExecuteModule(ctx context.Context, req ExecuteModuleRequest)
 		Inputs:       req.Inputs,
 		ChainConfig:  req.ChainConfig,
 		TargetConfig: req.TargetConfig,
+		ChainKV:      req.ChainKV,
 	})
 	if err != nil {
 		return run.Result{}, err

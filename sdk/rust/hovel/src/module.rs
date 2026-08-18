@@ -1,5 +1,6 @@
 //! The module contract: metadata, configuration schema, and the [`Module`] trait.
 
+use crate::chain_kv::ChainKVContract;
 use crate::context::Context;
 use crate::credential_delivery::CredentialDeliveryDescriptor;
 use crate::credential_provider::{
@@ -112,6 +113,10 @@ pub trait Module {
     fn info(&self) -> Info;
     fn schema(&self) -> Schema;
     fn run(&self, ctx: &mut Context) -> Outcome;
+
+    fn chain_kv_contract(&self) -> Option<ChainKVContract> {
+        None
+    }
 
     fn describe_payloads(&self) -> Result<PayloadProviderDescriptor, String> {
         Err(format!(

@@ -7,12 +7,33 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/vibepwners/hovel/internal/app/operatorlog"
 )
 
 const DefaultOperation = "default"
 const PersistedStateSchemaVersion = 1
+
+const (
+	MaxChainKVKeyBytes    = 256
+	MaxChainKVValueBytes  = 64 * 1024
+	MaxChainKVTotalBytes  = 8 * 1024 * 1024
+	MaxChainKVBatchLength = 256
+)
+
+var ErrChainKVRevisionConflict = errors.New("chain kv revision conflict")
+
+type ChainKVMutation struct {
+	Operation string `json:"operation"`
+	Key       string `json:"key"`
+	Value     string `json:"value,omitempty"`
+}
+
+type ChainKVSnapshot struct {
+	Revision uint64            `json:"revision"`
+	Entries  map[string]string `json:"entries,omitempty"`
+}
 
 type Operation struct {
 	Name          string
@@ -30,6 +51,9 @@ type Chain struct {
 	TargetConfigs map[string]map[string]string
 	LogTopic      string
 	Logs          []operatorlog.Entry
+	KVKeys        []string
+	KVRevision    uint64
+	kv            map[string]string
 	nextStep      int
 }
 
@@ -59,6 +83,8 @@ type State struct {
 	LogTopic         string
 	Chains           []Chain
 	Operations       []Operation
+	KVKeys           []string
+	KVRevision       uint64
 }
 
 type PersistedState struct {
@@ -334,6 +360,27 @@ func (s *Session) UnsetChainConfig(key string) error {
 		return errors.New("active chain is required")
 	}
 	return s.chainStore().unsetChainConfig(operation, activeChain, key)
+}
+
+func (s *Session) ChainKVSnapshot() (ChainKVSnapshot, error) {
+	operation, activeChain := s.activeRef()
+	if activeChain == "" {
+		return ChainKVSnapshot{}, errors.New("active chain is required")
+	}
+	return s.chainStore().chainKVSnapshot(operation, activeChain)
+}
+
+func (s *Session) ChainKVSnapshotFor(chain string) (ChainKVSnapshot, error) {
+	operation, _ := s.activeRef()
+	return s.chainStore().chainKVSnapshot(operation, chain)
+}
+
+func (s *Session) ApplyChainKV(expectedRevision *uint64, mutations []ChainKVMutation) (ChainKVSnapshot, error) {
+	operation, activeChain := s.activeRef()
+	if activeChain == "" {
+		return ChainKVSnapshot{}, errors.New("active chain is required")
+	}
+	return s.chainStore().applyChainKV(operation, activeChain, expectedRevision, mutations)
 }
 
 func (s *Session) SetTargetConfig(target, key, value string) error {
@@ -678,6 +725,109 @@ func (s *Store) unsetChainConfig(operationName, chainName, key string) error {
 	return nil
 }
 
+func (s *Store) chainKVSnapshot(operationName, chainName string) (ChainKVSnapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	operation, ok := s.operations[normalizeOperation(operationName)]
+	if !ok {
+		return ChainKVSnapshot{}, errors.New("operation does not exist")
+	}
+	chain, ok := operation.chains[normalizeName(chainName)]
+	if !ok {
+		return ChainKVSnapshot{}, errors.New("chain does not exist")
+	}
+	return chainKVSnapshot(chain), nil
+}
+
+func (s *Store) applyChainKV(operationName, chainName string, expectedRevision *uint64, mutations []ChainKVMutation) (ChainKVSnapshot, error) {
+	if len(mutations) > MaxChainKVBatchLength {
+		return ChainKVSnapshot{}, fmt.Errorf("chain kv mutation batch exceeds maximum %d", MaxChainKVBatchLength)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	operation, ok := s.operations[normalizeOperation(operationName)]
+	if !ok {
+		return ChainKVSnapshot{}, errors.New("operation does not exist")
+	}
+	chain, ok := operation.chains[normalizeName(chainName)]
+	if !ok {
+		return ChainKVSnapshot{}, errors.New("chain does not exist")
+	}
+	if expectedRevision != nil && chain.KVRevision != *expectedRevision {
+		return ChainKVSnapshot{}, fmt.Errorf("%w: expected %d, current %d", ErrChainKVRevisionConflict, *expectedRevision, chain.KVRevision)
+	}
+	next := cloneStringMap(chain.kv)
+	if next == nil {
+		next = map[string]string{}
+	}
+	changedKeys := make([]string, 0, len(mutations))
+	for index, mutation := range mutations {
+		if err := validateChainKVKey(mutation.Key); err != nil {
+			return ChainKVSnapshot{}, fmt.Errorf("chain kv mutation %d: %w", index+1, err)
+		}
+		switch mutation.Operation {
+		case "set":
+			if !utf8.ValidString(mutation.Value) {
+				return ChainKVSnapshot{}, fmt.Errorf("chain kv mutation %d value must be valid UTF-8", index+1)
+			}
+			if len(mutation.Value) > MaxChainKVValueBytes {
+				return ChainKVSnapshot{}, fmt.Errorf("chain kv mutation %d value exceeds maximum %d bytes", index+1, MaxChainKVValueBytes)
+			}
+			if value, exists := next[mutation.Key]; !exists || value != mutation.Value {
+				next[mutation.Key] = mutation.Value
+				changedKeys = append(changedKeys, mutation.Key)
+			}
+		case "delete":
+			if _, exists := next[mutation.Key]; exists {
+				delete(next, mutation.Key)
+				changedKeys = append(changedKeys, mutation.Key)
+			}
+		default:
+			return ChainKVSnapshot{}, fmt.Errorf("chain kv mutation %d operation must be set or delete", index+1)
+		}
+	}
+	if chainKVSize(next) > MaxChainKVTotalBytes {
+		return ChainKVSnapshot{}, fmt.Errorf("chain kv store exceeds maximum %d bytes", MaxChainKVTotalBytes)
+	}
+	if len(changedKeys) == 0 {
+		return chainKVSnapshot(chain), nil
+	}
+	chain.kv = next
+	chain.KVRevision++
+	for _, key := range changedKeys {
+		chain.Logs = append(chain.Logs, operatorlog.Info("chain-kv", "chain kv changed",
+			operatorlog.Field{Name: "key", Value: key},
+			operatorlog.Field{Name: "revision", Value: fmt.Sprint(chain.KVRevision)},
+		))
+	}
+	return chainKVSnapshot(chain), nil
+}
+
+func validateChainKVKey(key string) error {
+	if strings.TrimSpace(key) == "" {
+		return errors.New("chain kv key is required")
+	}
+	if !utf8.ValidString(key) {
+		return errors.New("chain kv key must be valid UTF-8")
+	}
+	if len(key) > MaxChainKVKeyBytes {
+		return fmt.Errorf("chain kv key exceeds maximum %d bytes", MaxChainKVKeyBytes)
+	}
+	return nil
+}
+
+func chainKVSize(entries map[string]string) int {
+	total := 0
+	for key, value := range entries {
+		total += len(key) + len(value)
+	}
+	return total
+}
+
+func chainKVSnapshot(chain *Chain) ChainKVSnapshot {
+	return ChainKVSnapshot{Revision: chain.KVRevision, Entries: cloneStringMap(chain.kv)}
+}
+
 func (s *Store) setTargetConfig(operationName, chainName, target, key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -750,6 +900,11 @@ func (s *Store) snapshot(operationName, activeChain string) State {
 			state.Steps = cloneSteps(chain.Steps)
 			state.Config = cloneStringMap(chain.Config)
 			state.LogTopic = chain.LogTopic
+			state.KVRevision = chain.KVRevision
+			for key := range chain.kv {
+				state.KVKeys = append(state.KVKeys, key)
+			}
+			sort.Strings(state.KVKeys)
 		}
 	}
 	state.Chains = snapshotChains(operation)
@@ -839,10 +994,14 @@ func (s *Store) importOperation(persistedOperation PersistedOperation, legacyDef
 			TargetConfigs: cloneTargetConfigs(persisted.TargetConfigs),
 			LogTopic:      persisted.LogTopic,
 			Logs:          cloneEntries(persisted.Logs),
+			kv:            map[string]string{},
 			nextStep:      nextStep(persisted.Steps),
 		}
 		if chain.Config == nil {
 			chain.Config = map[string]string{}
+		}
+		if chain.kv == nil {
+			chain.kv = map[string]string{}
 		}
 		if chain.TargetConfigs == nil {
 			chain.TargetConfigs = map[string]map[string]string{}
@@ -911,6 +1070,7 @@ func (s *Store) ensureChain(operationName, chainName string) *Chain {
 		Config:        map[string]string{},
 		TargetConfigs: map[string]map[string]string{},
 		LogTopic:      logTopic(operation.Name, chainName),
+		kv:            map[string]string{},
 	}
 	operation.chains[chainName] = chain
 	return chain
@@ -999,6 +1159,12 @@ func cloneChain(chain Chain) Chain {
 	chain.Config = cloneStringMap(chain.Config)
 	chain.TargetConfigs = cloneTargetConfigs(chain.TargetConfigs)
 	chain.Logs = cloneEntries(chain.Logs)
+	chain.kv = cloneStringMap(chain.kv)
+	chain.KVKeys = make([]string, 0, len(chain.kv))
+	for key := range chain.kv {
+		chain.KVKeys = append(chain.KVKeys, key)
+	}
+	sort.Strings(chain.KVKeys)
 	return chain
 }
 

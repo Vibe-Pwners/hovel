@@ -187,6 +187,9 @@ fn schema(module: &dyn Module) -> Value {
     if !schema.planning_context.is_empty() {
         pairs.push(("planningContext", Value::Object(schema.planning_context)));
     }
+    if let Some(contract) = module.chain_kv_contract() {
+        pairs.push(("chainKV", contract.to_value()));
+    }
     Value::object(pairs)
 }
 
@@ -196,12 +199,20 @@ fn execute(module: &dyn Module, emitter: &mut Emitter, params: &Value) -> Value 
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let outcome = {
+    let (outcome, mutations) = {
         let mut ctx = Context::new(emitter, &module.info().name, params);
-        module.run(&mut ctx)
+        let outcome = module.run(&mut ctx);
+        let mutations = ctx.chain_kv.mutations();
+        (outcome, mutations)
     };
     let refs = emitter.refs_for_run(&run_id);
-    outcome.to_value(refs)
+    let mut response = outcome.to_value(refs);
+    if let Some(mutations) = mutations {
+        if let Value::Object(members) = &mut response {
+            members.push(("chainKVMutations".to_string(), mutations));
+        }
+    }
+    response
 }
 
 fn module_id(module: &dyn Module) -> String {

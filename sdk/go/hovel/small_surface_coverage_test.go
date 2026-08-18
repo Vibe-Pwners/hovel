@@ -21,6 +21,31 @@ func (coverageLargeJSON) MarshalJSON() ([]byte, error) {
 	return append([]byte{'"'}, append(bytes.Repeat([]byte{'x'}, maxFrameBytes), '"')...), nil
 }
 
+func TestChainKVContextResolutionAndMutations(t *testing.T) {
+	kv := newChainKV("mock://target one", 7, map[string]string{"survey/mock%3A%2F%2Ftarget%20one/port": "445"})
+	ctx := &Context{Target: "mock://target one", Inputs: map[string]any{}, TargetConfig: map[string]any{}, ChainConfig: map[string]any{}, chainKV: kv}
+	resolution := ctx.ResolveInput("target.port", "survey/{target}/port", "80")
+	if !resolution.Found || resolution.Source != "chain-kv" || resolution.Value != "445" {
+		t.Fatalf("resolution = %#v", resolution)
+	}
+	ctx.TargetConfig["target.port"] = "139"
+	if got := ctx.ResolveInput("target.port", "survey/{target}/port", "80"); got.Source != "target-config" || got.Value != "139" {
+		t.Fatalf("override = %#v", got)
+	}
+	if err := kv.Set("survey/{target}/service", "smb"); err != nil {
+		t.Fatal(err)
+	}
+	if value, ok := kv.Get("survey/{target}/service"); !ok || value != "smb" {
+		t.Fatalf("local value = %q, %v", value, ok)
+	}
+	if mutations := kv.wireMutations(); mutations == nil || mutations["baseRevision"] != uint64(7) {
+		t.Fatalf("mutations = %#v", mutations)
+	}
+	if err := unavailableChainKV("target").Set("key", "value"); !errors.Is(err, ErrChainKVUnavailable) {
+		t.Fatalf("unavailable error = %v", err)
+	}
+}
+
 type coverageFailWriter struct {
 	writes int
 	failAt int

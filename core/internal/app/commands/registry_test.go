@@ -13,7 +13,7 @@ func TestHovelRegistryDefinesStableOperatorCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OperatorCapabilities returned error: %v", err)
 	}
-	if got, want := len(capabilities), 103; got != want {
+	if got, want := len(capabilities), 107; got != want {
 		t.Fatalf("operator capability count = %d, want %d", got, want)
 	}
 	for _, capability := range capabilities {
@@ -29,7 +29,7 @@ func TestHovelRegistryDefinesStableOperatorCapabilities(t *testing.T) {
 	for _, capability := range capabilities {
 		ids = append(ids, string(capability.ID))
 	}
-	const wantDigest = "377f5e0d17783a0b90bbcdb8752dbbfbd2ada788b442f38cc0fb0dd9da5e0ad4"
+	const wantDigest = "0f2ef76026e27e1e4ae210db60850d9d99d6c2a34246a37d23c04edd00ee193c"
 	if got := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(ids, "\n")))); got != wantDigest {
 		t.Fatalf("operator capability ID digest = %s, want %s; update the versioned parity contract deliberately", got, wantDigest)
 	}

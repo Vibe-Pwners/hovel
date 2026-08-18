@@ -64,6 +64,7 @@ class HovelModule(ABC):
     target_config: ClassVar[tuple[Requirement, ...]] = ()
     outputs: ClassVar[dict[str, Any]] = {}
     planning_context: ClassVar[dict[str, Any]] = {}
+    chain_kv_contract: ClassVar[dict[str, Any]] = {}
 
     def info(self) -> dict[str, Any]:
         info: dict[str, Any] = {
@@ -86,6 +87,8 @@ class HovelModule(ABC):
         }
         if self.planning_context:
             schema["planningContext"] = dict(self.planning_context)
+        if self.chain_kv_contract:
+            schema["chainKV"] = dict(self.chain_kv_contract)
         return schema
 
     def describe_steps(self) -> dict[str, Any]:

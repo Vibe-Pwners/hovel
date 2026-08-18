@@ -10,6 +10,7 @@ filegroup(
 filegroup(
     name = "protocol_doc_sources",
     srcs = [
+        "src/chain_kv.rs",
         "src/credential_delivery.rs",
         "src/credential_provider.rs",
         "src/mesh.rs",

@@ -39,6 +39,7 @@
 pub mod base64;
 pub mod json;
 
+mod chain_kv;
 mod context;
 mod credential_delivery;
 mod credential_provider;
@@ -55,6 +56,7 @@ mod sha256;
 #[cfg(test)]
 mod tests;
 
+pub use chain_kv::{ChainKV, ChainKVBinding, ChainKVContract};
 pub use context::Context;
 pub use credential_delivery::{
     CredentialConsumerType, CredentialDeliveryCapability, CredentialDeliveryDescriptor,

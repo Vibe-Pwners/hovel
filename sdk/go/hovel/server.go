@@ -262,6 +262,9 @@ func (s *server) schema() map[string]any {
 	if contextPresent(schema.PlanningContext) {
 		out["planningContext"] = schema.PlanningContext
 	}
+	if provider, ok := s.module.(ChainKVContractProvider); ok {
+		out["chainKV"] = provider.ChainKVContract()
+	}
 	return out
 }
 
@@ -1020,6 +1023,10 @@ func (s *server) execute(params json.RawMessage) (any, error) {
 		ChainConfig  map[string]any `json:"chainConfig"`
 		TargetConfig map[string]any `json:"targetConfig"`
 		Agent        *AgentContext  `json:"agentContext"`
+		ChainKV      *struct {
+			Revision uint64            `json:"revision"`
+			Entries  map[string]string `json:"entries"`
+		} `json:"chainKV"`
 	}
 	if len(params) > 0 {
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -1038,11 +1045,16 @@ func (s *server) execute(params json.RawMessage) (any, error) {
 		Log:          &Logger{name: s.module.Info().Name, emit: s.emitLog},
 		sessions:     registry,
 	}
+	if p.ChainKV != nil {
+		ctx.chainKV = newChainKV(p.Target, p.ChainKV.Revision, p.ChainKV.Entries)
+	} else {
+		ctx.chainKV = unavailableChainKV(p.Target)
+	}
 	result, err := s.module.Run(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return result.toRPC(registry.refs()), nil
+	return result.toRPC(registry.refs(), ctx.chainKV.wireMutations()), nil
 }
 
 func (s *server) sessionWrite(params json.RawMessage) (any, error) {

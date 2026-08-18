@@ -1,5 +1,5 @@
 from hovel_sdk.config import Requirement
-from hovel_sdk.context import AgentContext, AgentEntity, Context
+from hovel_sdk.context import AgentContext, AgentEntity, ChainKV, Context
 from hovel_sdk.credential_delivery import (
     CREDENTIAL_DELIVERY_SCHEMA_V1,
     CredentialBytePatternTarget,
@@ -163,6 +163,7 @@ __all__ = [
     "AgentEntity",
     "AgentHint",
     "Artifact",
+    "ChainKV",
     "Context",
     "CredentialArtifactInput",
     "CredentialArtifactOutput",

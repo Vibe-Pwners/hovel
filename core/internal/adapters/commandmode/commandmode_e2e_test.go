@@ -506,10 +506,13 @@ while True:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 1 {
-		t.Fatalf("artifact records = %#v, want one", records)
+	if len(records) != 2 {
+		t.Fatalf("artifact records = %#v, want module artifact and sealed chain KV", records)
 	}
 	record := records[0]
+	if record.Name != "loot.bin" {
+		record = records[1]
+	}
 	if record.ThrowID != payload.ThrowID || record.RunID != payload.Results[0].RunID || record.ModuleID != "file-artifact@v1" || record.Name != "loot.bin" {
 		t.Fatalf("artifact record = %#v, payload = %#v", record, payload)
 	}

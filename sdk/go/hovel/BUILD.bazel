@@ -3,6 +3,7 @@ load("//tools/coverage:go_branch.bzl", "go_branch_sources")
 
 HOVEL_SRCS = [
     "agent.go",
+    "chain_kv.go",
     "context.go",
     "credential_bundle.go",
     "credential_delivery.go",

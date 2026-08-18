@@ -254,6 +254,7 @@ type Context struct {
 	Log          *Logger
 
 	sessions *sessionRegistry
+	chainKV  *ChainKV
 }
 
 // Input resolves a configuration value, preferring per-run inputs, then

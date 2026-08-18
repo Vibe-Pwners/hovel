@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import Any, BinaryIO, cast
 
-from hovel_sdk.context import AgentContext, Context
+from hovel_sdk.context import AgentContext, ChainKV, Context
 from hovel_sdk.credential_delivery import _CREDENTIAL_RPC_DESCRIBE_METHOD, CredentialDeliveryDescriptor
 from hovel_sdk.credential_provider import (
     _CREDENTIAL_RPC_ENCODE_METHOD,
@@ -275,13 +275,18 @@ class JSONRPCServer:
             agent=AgentContext.from_rpc(params.get("agentContext")),
             log=logging.getLogger(self._module.name or "hovel.module"),
             sessions=sessions,
+            chain_kv=ChainKV(target, params.get("chainKV")),
         )
         maybe_result = self._module.run(ctx)
         if inspect.isawaitable(maybe_result):
             result = await maybe_result
         else:
             result = maybe_result
-        return result.to_rpc(sessions=sessions.refs())
+        response = result.to_rpc(sessions=sessions.refs())
+        mutations = ctx.chain_kv.to_rpc()
+        if mutations is not None:
+            response["chainKVMutations"] = mutations
+        return response
 
     async def _run_mesh_task(self, params: dict[str, Any]) -> dict[str, Any]:
         request = MeshTaskRequest.from_rpc(params)
