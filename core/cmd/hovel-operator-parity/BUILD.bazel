@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_binary(
+    name = "hovel-operator-parity",
+    embed = [":hovel-operator-parity_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "hovel-operator-parity_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/vibepwners/hovel/cmd/hovel-operator-parity",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//internal/adapters/mcp",
+        "//internal/app/commands",
+    ],
+)

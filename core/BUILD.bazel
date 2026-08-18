@@ -35,6 +35,7 @@ filegroup(
     name = "build",
     srcs = [
         "//cmd/hovel",
+        "//cmd/hovel-operator-parity",
         "//cmd/hovel-ui-catalog",
         "//schemas:descriptor_schemas",
     ],
@@ -63,6 +64,7 @@ _COVERAGE_LAYER_TESTS = [
 ]
 
 _CI_TESTS = [
+    "//internal/adapters/mcp:mcp_contract_test",
     "//internal/adapters/pki/memory:memory_test",
     "//internal/adapters/cli:cli_test",
     "//internal/adapters/commandmode:commandmode_e2e_test",

@@ -76,6 +76,7 @@
       </section>
       <section class="report-panel" id="report-panel-coverage" role="tabpanel" aria-labelledby="report-tab-coverage" data-report-panel="coverage" hidden>
         ${renderCoverage(report)}
+        ${renderOperatorParity(report)}
       </section>
       <section class="report-panel" id="report-panel-suites" role="tabpanel" aria-labelledby="report-tab-suites" data-report-panel="suites" hidden>
         ${renderSuiteBreakdown(report)}
@@ -307,6 +308,47 @@
             `;
           }).join("")}
         </div>
+      </section>
+    `;
+  }
+
+  function renderOperatorParity(report) {
+    const parity = report.operator_parity;
+    if (!parity) {
+      return "";
+    }
+    const totals = parity.totals || {};
+    const rows = (parity.capabilities || []).map((capability) => {
+      const tools = (capability.agentRoutes || []).map((route) => route.tool).join(", ") || capability.fallbackTool || "missing";
+      return `
+        <tr>
+          <td><code>${escapeHtml(capability.id)}</code></td>
+          <td>${escapeHtml((capability.humanRoutes || []).join(", "))}</td>
+          <td>${escapeHtml(tools)}</td>
+          <td>${escapeHtml(capability.risk || "")}</td>
+          <td>${escapeHtml(capability.status || "")}</td>
+        </tr>
+      `;
+    }).join("");
+    return `
+      <section class="suite-breakdown operator-parity">
+        <div class="section-heading">
+          <div>
+            <span class="panel-kicker">Operator contract</span>
+            <h2>Operator interface parity</h2>
+            <p>Human CLI capabilities and their typed agent routes, generated from the same application registry.</p>
+          </div>
+          <span class="result-count">${Number(totals.capabilities || 0)} capabilities</span>
+        </div>
+        <section class="summary-grid" aria-label="Operator parity summary">
+          ${metric("Reachable", `${Number(totals.reachabilityPercentage || 0).toFixed(1)}%`)}
+          ${metric("Typed MCP", `${Number(totals.typedPercentage || 0).toFixed(1)}%`)}
+          ${metric("Semantic contracts", `${Number(totals.contractPercentage || 0).toFixed(1)}%`)}
+        </section>
+        <table>
+          <thead><tr><th>Capability</th><th>Human route</th><th>Agent route</th><th>Risk</th><th>Level</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
       </section>
     `;
   }

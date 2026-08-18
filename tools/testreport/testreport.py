@@ -102,6 +102,7 @@ class TestReport:
     totals: dict[str, Any]
     linters: list[LintTool]
     coverage: list[CoverageMetric]
+    operator_parity: dict[str, Any] | None
     jobs: list[TestJob]
     targets: list[TestTarget]
 
@@ -121,6 +122,7 @@ def build_report(
     coverage_lcov_files: list[tuple[str, Path, float]] | None = None,
     job_summary_files: list[Path] | None = None,
     lint_report_files: list[Path] | None = None,
+    operator_parity_files: list[Path] | None = None,
 ) -> TestReport:
     targets: dict[str, TestTarget] = {}
     for bep in bep_files:
@@ -137,6 +139,7 @@ def build_report(
     coverage = ingest_coverage(coverage_json_files or [], coverage_lcov_files or [], repo)
     jobs = ingest_jobs(job_summary_files or [], repo, coverage)
     linters = ingest_linters(lint_report_files or [])
+    operator_parity = ingest_operator_parity(operator_parity_files or [])
     return TestReport(
         title=title,
         generated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -147,9 +150,31 @@ def build_report(
         totals=totals,
         linters=linters,
         coverage=coverage,
+        operator_parity=operator_parity,
         jobs=jobs,
         targets=ordered,
     )
+
+
+def ingest_operator_parity(files: list[Path]) -> dict[str, Any] | None:
+    reports: list[dict[str, Any]] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict) or raw.get("schemaVersion") != "hovel.operator-parity/v1":
+            raise ValueError(f"unsupported operator parity schema: {path}")
+        totals = raw.get("totals")
+        capabilities = raw.get("capabilities")
+        if not isinstance(totals, dict) or not isinstance(capabilities, list):
+            raise ValueError(f"invalid operator parity report: {path}")
+        for capability in capabilities:
+            if not isinstance(capability, dict) or not capability.get("id") or not capability.get("humanRoutes"):
+                raise ValueError(f"invalid operator parity capability: {path}")
+        reports.append(raw)
+    if len(reports) > 1:
+        raise ValueError("only one operator parity report may be ingested")
+    return reports[0] if reports else None
 
 
 def ingest_linters(files: list[Path]) -> list[LintTool]:

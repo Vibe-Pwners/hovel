@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hovel.dev/schemas/operator-parity-v1.json",
+  "title": "Hovel operator parity evidence",
+  "type": "object",
+  "required": ["schemaVersion", "totals", "capabilities"],
+  "properties": {
+    "schemaVersion": {"const": "hovel.operator-parity/v1"},
+    "totals": {
+      "type": "object",
+      "required": ["capabilities", "reachable", "typed", "contracted", "reachabilityPercentage", "typedPercentage", "contractPercentage"],
+      "properties": {
+        "capabilities": {"type": "integer", "minimum": 0},
+        "reachable": {"type": "integer", "minimum": 0},
+        "typed": {"type": "integer", "minimum": 0},
+        "contracted": {"type": "integer", "minimum": 0},
+        "reachabilityPercentage": {"type": "number", "minimum": 0, "maximum": 100},
+        "typedPercentage": {"type": "number", "minimum": 0, "maximum": 100},
+        "contractPercentage": {"type": "number", "minimum": 0, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "humanRoutes", "risk", "requiresDaemon", "level", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9-]+(?:\\.[a-z0-9-]+)+$"},
+          "summary": {"type": "string", "minLength": 1},
+          "humanRoutes": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "agentRoutes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["tool"],
+              "properties": {
+                "tool": {"type": "string", "pattern": "^hovel_[a-z0-9_]+$"},
+                "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}}
+              },
+              "additionalProperties": false
+            }
+          },
+          "fallbackTool": {"type": "string"},
+          "risk": {"enum": ["read", "write", "destructive"]},
+          "requiresDaemon": {"type": "boolean"},
+          "level": {"type": "integer", "minimum": 0, "maximum": 4},
+          "status": {"enum": ["missing", "command_run", "typed", "contracted", "demonstrated"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

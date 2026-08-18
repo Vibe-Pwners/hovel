@@ -50,6 +50,12 @@ class ReportUITest(unittest.TestCase):
         self.assertIn('.report-view-tab[aria-selected="true"]', REPORT_CSS)
         self.assertIn("@media (prefers-reduced-motion: reduce)", REPORT_CSS)
 
+    def test_operator_parity_evidence_is_visible_in_coverage(self) -> None:
+        self.assertIn("Operator interface parity", REPORT_JS)
+        self.assertIn("Typed MCP", REPORT_JS)
+        self.assertIn("Semantic contracts", REPORT_JS)
+        self.assertIn("parity.capabilities", REPORT_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

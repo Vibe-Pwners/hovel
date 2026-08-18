@@ -3,6 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "commands",
     srcs = [
+        "capabilities.go",
         "catalog.go",
         "logging.go",
         "module_check.go",
