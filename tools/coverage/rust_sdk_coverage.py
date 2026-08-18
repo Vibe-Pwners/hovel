@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 
 
@@ -43,8 +43,18 @@ def test_only_lines(source: Path) -> set[int]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("test_binary", type=Path)
+    parser.add_argument("llvm_profdata", type=Path)
+    parser.add_argument("llvm_cov", type=Path)
+    parser.add_argument(
+        "--no-enforce",
+        action="store_true",
+        help="Write evidence without failing below 100%.",
+    )
+    args = parser.parse_args()
     test_binary, llvm_profdata, llvm_cov = map(
-        lambda value: runfile(Path(value)), sys.argv[1:4]
+        runfile, (args.test_binary, args.llvm_profdata, args.llvm_cov)
     )
     workspace = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", Path.cwd()))
     output = workspace / "coverage"
@@ -142,7 +152,7 @@ def main() -> int:
         json.dumps(metric, indent=2) + "\n", encoding="utf-8"
     )
     print(f"Rust SDK branches: {covered}/{total} ({detail['percent']:.2f}%)")
-    return 0 if total > 0 and covered == total else 1
+    return 0 if total > 0 and (covered == total or args.no_enforce) else 1
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ def _impl(ctx: TaskContext) -> int:
         (["run", "//tools/coverage:python_sdk_coverage", "--", "--no-enforce"], root),
         (["test", "--bazel-flag=--test_strategy=standalone", "--bazel-flag=--nocache_test_results", "//:sdk_test", "//:module_examples_test", "//:modules_test", "//:docs_test"], root),
         (["run", "//tools/coverage:go_branch_inventory", "--", "--hits-root=bazel-testlogs", "--no-enforce"], root),
-        (["run", "//tools/coverage:rust_sdk_coverage"], root),
+        (["run", "//tools/coverage:rust_sdk_coverage", "--", "--no-enforce"], root),
         (["run", "//cmd/hovel-operator-parity", "--", "--output=../coverage/operator-parity.results.json"], core),
         (["run", "//tools/testreport:render_report", "--", "--output=.test-report/evidence", "--scan-testlogs=bazel-testlogs", "--lint-report=.test-report/linters/report.json", "--coverage-json=coverage/python-sdk.results.json", "--coverage-json=coverage/go-sdk-branches.results.json", "--coverage-json=coverage/rust-sdk-branches.results.json", "--operator-parity=coverage/operator-parity.results.json"], root),
         (["run", "//docs/tools/docs:stage_site_with_report"], root),
