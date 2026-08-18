@@ -37,11 +37,15 @@ def _impl(ctx: TaskContext) -> int:
             (["test", "//:docs_test"], root),
             (["build", "//docs/tools/docs:site"], root),
         ],
+        "agent": [
+            (["test", "//agent/tools:package_agent_test"], root),
+            (["run", "//agent/tools:package_agent", "--", "--validate"], root),
+        ],
     }
     selected = ctx.args.scope[0]
     if selected == "all":
         steps = []
-        for name in ["repo", "core", "sdk", "module-examples", "modules", "docs"]:
+        for name in ["repo", "core", "sdk", "module-examples", "modules", "docs", "agent"]:
             steps.extend(scopes[name])
         return run_steps(ctx, steps)
     if selected not in scopes:
@@ -50,7 +54,7 @@ def _impl(ctx: TaskContext) -> int:
     return run_steps(ctx, scopes[selected])
 
 hovel_check = task(
-    args = {"scope": args.positional(default = ["all"], minimum = 0, maximum = 1, description = "Scope: all, repo, core, sdk, module-examples, modules, or docs.")},
+    args = {"scope": args.positional(default = ["all"], minimum = 0, maximum = 1, description = "Scope: all, repo, core, sdk, module-examples, modules, docs, or agent.")},
     summary = "Run the complete non-publishing Hovel verification gate.",
     implementation = _impl,
 )

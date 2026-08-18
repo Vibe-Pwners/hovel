@@ -1,0 +1,30 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "package_agent",
+    srcs = ["package_agent.py"],
+    data = [
+        "//:.claude-plugin/marketplace.json",
+        "//:LICENSE",
+        "//:VERSION",
+        "//agent:claude_plugin",
+    ],
+    python_version = "PY3",
+)
+
+py_test(
+    name = "package_agent_test",
+    srcs = [
+        "package_agent.py",
+        "package_agent_test.py",
+    ],
+    data = [
+        "//:.claude-plugin/marketplace.json",
+        "//:LICENSE",
+        "//:VERSION",
+        "//agent:claude_plugin",
+    ],
+    python_version = "PY3",
+)

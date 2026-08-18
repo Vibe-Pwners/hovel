@@ -1,0 +1,18 @@
+{
+  "name": "vibepwners-hovel",
+  "owner": {
+    "name": "Vibe Pwners",
+    "url": "https://github.com/vibepwners"
+  },
+  "metadata": {
+    "description": "Official Hovel agent integrations"
+  },
+  "plugins": [
+    {
+      "name": "hovel",
+      "description": "Official Hovel skills and MCP integration",
+      "source": "./agent",
+      "category": "development"
+    }
+  ]
+}

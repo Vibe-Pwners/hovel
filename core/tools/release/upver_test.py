@@ -32,6 +32,17 @@ def write_release_tree(root: Path, version: str) -> None:
     write(root / "core" / "internal" / "version" / "version.go", f'package version\n\nconst Version = "{version}"\n')
     write(root / "sdk" / "python" / "pyproject.toml", f'[project]\nname = "hovel-sdk"\nversion = "{version}"\n')
     write(root / "sdk" / "python" / "uv.lock", f'[[package]]\nname = "hovel-sdk"\nversion = "{version}"\n')
+    write(root / "agent" / ".claude-plugin" / "plugin.json", f'{{"version": "{version}"}}\n')
+    write(
+        root / "agent" / "skills" / "hovel" / "SKILL.md",
+        f'''---
+compatibility: Requires Hovel {version.rsplit(".", 1)[0]}.x and a configured Hovel MCP server.
+metadata:
+  hovel-min-version: "{version.rsplit(".", 1)[0]}.0"
+  hovel-max-version: "0.2.0"
+---
+''',
+    )
 
 
 def main() -> None:
@@ -49,6 +60,11 @@ def main() -> None:
         assert 'const Version = "1.2.3"' in (root / "core" / "internal" / "version" / "version.go").read_text(encoding="utf-8")
         assert 'version = "1.2.3"' in (root / "sdk" / "python" / "pyproject.toml").read_text(encoding="utf-8")
         assert 'version = "1.2.3"' in (root / "sdk" / "python" / "uv.lock").read_text(encoding="utf-8")
+        assert '"version": "1.2.3"' in (root / "agent" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        skill = (root / "agent" / "skills" / "hovel" / "SKILL.md").read_text(encoding="utf-8")
+        assert "Requires Hovel 1.2.x" in skill
+        assert 'hovel-min-version: "1.2.0"' in skill
+        assert 'hovel-max-version: "2.0.0"' in skill
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

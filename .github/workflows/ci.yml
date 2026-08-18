@@ -106,6 +106,22 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: python3 core/tools/ci/job_summary.py docs-ci
 
+  agent:
+    name: Agent integration packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/setup-hovel
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+      - run: aspect hovel-check agent
+      - run: aspect hovel-release agent
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agent-integration-packages
+          path: dist/agent/
+          if-no-files-found: error
+
   squatter-wine:
     name: Squatter Wine tests and demo
     runs-on: ubuntu-latest

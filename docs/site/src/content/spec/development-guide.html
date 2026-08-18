@@ -18,11 +18,11 @@
   <table>
     <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
     <tbody>
-      <tr><td><code>aspect hovel-check</code></td><td>Run the complete non-publishing gate for repository policy, core, SDKs, example modules, modules, and docs.</td></tr>
-      <tr><td><code>aspect hovel-check &lt;scope&gt;</code></td><td>Check one of <code>repo</code>, <code>core</code>, <code>sdk</code>, <code>module-examples</code>, <code>modules</code>, or <code>docs</code>.</td></tr>
+      <tr><td><code>aspect hovel-check</code></td><td>Run the complete non-publishing gate for repository policy, core, SDKs, example modules, modules, docs, and agent integrations.</td></tr>
+      <tr><td><code>aspect hovel-check &lt;scope&gt;</code></td><td>Check one of <code>repo</code>, <code>core</code>, <code>sdk</code>, <code>module-examples</code>, <code>modules</code>, <code>docs</code>, or <code>agent</code>.</td></tr>
       <tr><td><code>aspect hovel-format</code></td><td>Format the wired Go, Python, Rust, and Squatter sources and refresh Gazelle metadata.</td></tr>
       <tr><td><code>aspect hovel-report</code></td><td>Run report-producing tests and materialize the evidence-backed static site.</td></tr>
-      <tr><td><code>aspect hovel-release &lt;kind&gt;</code></td><td>Build, without publishing, <code>hovel</code>, <code>sdk</code>, <code>modules</code>, <code>picblobs</code>, or <code>picblobs-cli</code> artifacts.</td></tr>
+      <tr><td><code>aspect hovel-release &lt;kind&gt;</code></td><td>Build, without publishing, <code>hovel</code>, <code>sdk</code>, <code>modules</code>, <code>picblobs</code>, <code>picblobs-cli</code>, or <code>agent</code> artifacts.</td></tr>
       <tr><td><code>aspect hovel &lt;mode&gt; -- …</code></td><td>Run the development CLI, daemon, MCP adapter, status, initialization, throw, or session workflow.</td></tr>
       <tr><td><code>aspect build|test|run …</code></td><td>Address a declared Bazel target through the repository's selected configuration.</td></tr>
     </tbody>
@@ -37,6 +37,7 @@
       <tr><td><code>modules/examples/</code></td><td>Cross-language compatibility examples.</td><td><code>aspect hovel-check module-examples</code></td></tr>
       <tr><td><code>modules/</code></td><td>Integrated modules, including Squatter and Picblobs.</td><td><code>aspect hovel-check modules</code></td></tr>
       <tr><td><code>docs/</code></td><td>Book content, module manuals, generated API references, demos, and the static site.</td><td><code>aspect hovel-check docs</code></td></tr>
+      <tr><td><code>agent/</code></td><td>Canonical Agent Skills and Claude, Codex, and OpenCode distribution packaging.</td><td><code>aspect hovel-check agent</code></td></tr>
     </tbody>
   </table>
   <p>

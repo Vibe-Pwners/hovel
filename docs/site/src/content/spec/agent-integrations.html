@@ -1,0 +1,345 @@
+<!-- hovel-doc: {"title":"Agent Integrations","group":"Operator Experience","order":140,"navTitle":"Agent Integrations","description":"Install, verify, operate, upgrade, and troubleshoot the official Hovel skills and MCP integration for Claude Code, Codex, and OpenCode."} -->
+<article>
+  <p class="book-kicker">// bring your own AI harness</p>
+  <h1>Agent Integrations</h1>
+  <p class="book-lede">
+    Give Claude Code, Codex, or OpenCode both halves of effective Hovel operation:
+    typed access to the running framework through MCP, and the official Hovel
+    skills that teach the agent how to use that access deliberately. One Hovel
+    command installs the version-matched integration for a user or a project.
+  </p>
+
+  <nav class="page-toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <ol>
+      <li><a href="#quickstart">Quickstart</a></li>
+      <li><a href="#what-installs">What gets installed</a></li>
+      <li><a href="#hosts">Claude Code, Codex, and OpenCode</a></li>
+      <li><a href="#first-workflow">Your first agent workflow</a></li>
+      <li><a href="#safety">Execution and safety</a></li>
+      <li><a href="#versions">Versions, upgrades, and offline use</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#development">Packaging and release development</a></li>
+    </ol>
+  </nav>
+
+  <div class="callout warning">
+    <strong>Use Hovel only for authorized assessments.</strong> Agent skills do
+    not weaken Hovel policy. Every throw still needs a persisted plan, review of
+    the exact plan hash, recorded confirmation, and any dangerous-module or
+    launch-key approval required by the daemon.
+  </div>
+
+  <h2 id="quickstart">Quickstart</h2>
+  <p>
+    Install the Hovel CLI, initialize or enter a Hovel workspace, and install the
+    integration for the harness you use. User scope is the default.
+  </p>
+<pre data-lang="shell"><code>pipx install hovel
+
+# choose one host
+hovel agent install claude
+hovel agent install codex
+hovel agent install opencode
+</code></pre>
+  <p>
+    Restart or open a fresh agent session after installation so the host can
+    discover its new plugin, skills, and MCP server. Then begin with a read-only
+    request:
+  </p>
+<pre data-lang="text"><code>Use Hovel to inspect the current workspace and operation.
+Summarize the active chain, targets, validation state, and anything
+that requires operator attention. Do not modify state or start a throw.
+</code></pre>
+  <p>
+    Hovel installs all specialized skills as one product. You do not install
+    chain-building, throwing, payload, or session skills separately; the host
+    discovers the right skill on demand.
+  </p>
+
+  <h3 id="project-install">Install for one project</h3>
+  <p>
+    Use project scope when the integration should travel with a repository or
+    when you do not want to change user-level agent configuration. Run the
+    command from the project root:
+  </p>
+<pre data-lang="shell"><code>hovel agent install claude --scope project
+hovel agent install codex --scope project
+hovel agent install opencode --scope project
+</code></pre>
+  <p>
+    Preview either scope before making filesystem changes or invoking a native
+    host package manager:
+  </p>
+<pre data-lang="shell"><code>hovel agent install codex --scope project --dry-run
+</code></pre>
+
+  <h2 id="what-installs">What gets installed</h2>
+  <p>
+    The integration intentionally separates capability from operating knowledge.
+    The running Hovel server remains the source of truth for schemas and current
+    state; static skills contain durable strategy and safety guidance.
+  </p>
+  <div class="diagram" role="img" aria-label="An agent host loads Hovel skills and invokes typed tools from hovel mcp, which calls the same daemon application services as the human CLI.">
+    <div class="diagram-row">
+      <div class="diagram-node"><strong>Agent host</strong><span>Claude Code / Codex / OpenCode</span></div>
+      <div class="diagram-arrow">→</div>
+      <div class="diagram-node"><strong>Hovel skills</strong><span>workflow, review, recovery</span></div>
+    </div>
+    <div class="diagram-row">
+      <div class="diagram-node"><strong>Typed MCP tools</strong><span>current capabilities and schemas</span></div>
+      <div class="diagram-arrow">→</div>
+      <div class="diagram-node"><strong>hoveld</strong><span>shared policy, state, and audit trail</span></div>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Layer</th><th>Responsibility</th><th>Source of truth</th></tr></thead>
+    <tbody>
+      <tr><td>Hovel MCP</td><td>What the agent can inspect or do right now.</td><td>The installed Hovel binary and daemon.</td></tr>
+      <tr><td>Hovel skills</td><td>How to discover state, build chains, review plans, operate sessions, and recover safely.</td><td>The versioned agent integration package.</td></tr>
+      <tr><td>Host wrapper</td><td>Where skills are discovered and how <code>hovel mcp</code> is launched.</td><td>Claude, Codex, or OpenCode configuration.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Skills do not duplicate MCP JSON schemas or hard-code module catalogs. They
+    instruct the agent to inspect the live catalog and workspace before acting,
+    which keeps the guidance useful as modules and provider capabilities evolve.
+    See <a href="mcp-agent.html">MCP and Agent Operation</a> for the complete
+    protocol, tool surface, and parity contract.
+  </p>
+
+  <h3 id="skill-suite">The skill suite</h3>
+  <table>
+    <thead><tr><th>Skill</th><th>Loaded when the agent needs to…</th><th>Important boundary</th></tr></thead>
+    <tbody>
+      <tr><td><code>hovel</code></td><td>Understand the core mental model and select a specialized workflow.</td><td>Routes work; it does not replace typed tool discovery.</td></tr>
+      <tr><td><code>hovel-discovery</code></td><td>Orient to workspace, catalog, operation, and chain state.</td><td>Starts read-only and reuses suitable state.</td></tr>
+      <tr><td><code>hovel-chain-building</code></td><td>Choose targets and modules, configure a chain, and validate it.</td><td>Validation never implies permission to execute.</td></tr>
+      <tr><td><code>hovel-throw</code></td><td>Plan, review, confirm, approve, start, and observe a throw.</td><td>Approval is bound to the exact persisted plan.</td></tr>
+      <tr><td><code>hovel-payloads</code></td><td>Inspect installed payload capabilities and call a supported operation.</td><td>Payloads, targets, artifacts, and sessions are distinct resources.</td></tr>
+      <tr><td><code>hovel-sessions</code></td><td>Discover, inspect, read, and deliberately write to an established session.</td><td>No new throw is created merely to find a session.</td></tr>
+      <tr><td><code>hovel-artifacts</code></td><td>Find results and reason about their provenance.</td><td>Artifacts are evidence, not installed payloads.</td></tr>
+      <tr><td><code>hovel-troubleshooting</code></td><td>Refresh state, interpret errors, and recover from stale assumptions.</td><td>Recovery never bypasses policy or confirmation.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="hosts">Host-specific installation</h2>
+  <p>
+    The command-line interface is stable across hosts, but Hovel uses each
+    harness's native distribution mechanism where one is available. Configuration
+    files are merged rather than replaced.
+  </p>
+  <table>
+    <thead><tr><th>Host and scope</th><th>Skills and plugin</th><th>MCP configuration</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Code, user</td><td>Native Claude marketplace and plugin installation.</td><td>Plugin-provided <code>.mcp.json</code>.</td></tr>
+      <tr><td>Claude Code, project</td><td>Native Claude project-scoped marketplace and plugin installation.</td><td>Plugin-provided <code>.mcp.json</code>.</td></tr>
+      <tr><td>Codex, user</td><td>Versioned local marketplace cache and native Codex plugin installation.</td><td>Plugin-provided MCP definition.</td></tr>
+      <tr><td>Codex, project</td><td><code>.agents/skills/</code> in the current project.</td><td><code>.codex/config.toml</code>.</td></tr>
+      <tr><td>OpenCode, user</td><td><code>~/.config/opencode/skills/</code>.</td><td><code>~/.config/opencode/opencode.json</code>.</td></tr>
+      <tr><td>OpenCode, project</td><td><code>.opencode/skills/</code> in the current project.</td><td><code>opencode.json</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="claude">Claude Code</h3>
+<pre data-lang="shell"><code>hovel agent install claude
+# or
+hovel agent install claude --scope project
+</code></pre>
+  <p>
+    Hovel asks the Claude CLI to add the version-pinned Hovel marketplace and
+    install <code>hovel@vibepwners-hovel</code>. The plugin contains the complete
+    skill suite and the command-based MCP definition. If you prefer to use the
+    Claude package manager directly:
+  </p>
+<pre data-lang="shell"><code>claude plugin marketplace add vibepwners/hovel@v{{HOVEL_VERSION}} --scope user
+claude plugin install hovel@vibepwners-hovel --scope user
+</code></pre>
+
+  <h3 id="codex">Codex</h3>
+<pre data-lang="shell"><code>hovel agent install codex
+# repository-local portable skills and MCP config
+hovel agent install codex --scope project
+</code></pre>
+  <p>
+    User scope downloads the Codex archive, verifies it, caches its marketplace,
+    and invokes the native Codex plugin manager. Project scope uses the portable
+    Agent Skills layout because Codex plugin management is user-scoped. It adds
+    only the Hovel MCP section to an existing <code>.codex/config.toml</code> and
+    preserves unrelated settings and comments.
+  </p>
+
+  <h3 id="opencode">OpenCode</h3>
+<pre data-lang="shell"><code>hovel agent install opencode
+# repository-local skills and opencode.json entry
+hovel agent install opencode --scope project
+</code></pre>
+  <p>
+    Hovel installs standard skills directly into OpenCode's discovery path and
+    adds the Hovel MCP server to <code>opencode.json</code>. The merge accepts
+    JSON-with-comments and trailing commas, retains existing plugins and MCP
+    servers, and leaves an identical Hovel entry unchanged.
+  </p>
+
+  <h2 id="first-workflow">Your first agent workflow</h2>
+  <p>
+    Start with a workspace already usable from the Hovel CLI. The agent and human
+    interfaces attach to the same daemon-owned operation, so you can inspect or
+    continue the work from either interface.
+  </p>
+  <ol>
+    <li>Open the agent host in the directory containing your Hovel workspace.</li>
+    <li>Ask for a read-only workspace and catalog snapshot.</li>
+    <li>Name the intended operation, target, and outcome. Tell the agent whether it may modify chain state.</li>
+    <li>Ask it to validate and show the exact plan without starting execution.</li>
+    <li>Review targets, modules, configuration, risk flags, and required approvals yourself.</li>
+    <li>Authorize confirmation or execution explicitly only when the plan is correct.</li>
+  </ol>
+  <p>A useful chain-building request is concrete about the stopping point:</p>
+<pre data-lang="text"><code>Use Hovel to find the mock survey module and prepare a chain for
+mock://target-1 in the current operation. Inspect the module before adding it,
+fill only the required configuration, validate the chain, and show me the
+result. Do not plan or start a throw.
+</code></pre>
+  <p>For an existing session, make it equally clear that execution is not needed:</p>
+<pre data-lang="text"><code>Use Hovel to list the existing sessions, inspect the most recent shell
+session, and summarize its context and unread output. Do not create a throw
+and do not write to the session.
+</code></pre>
+
+  <h2 id="safety">Execution and safety</h2>
+  <p>
+    A valid chain is not an approved throw. Official skills teach the agent to
+    preserve Hovel's multi-stage execution state machine:
+  </p>
+<pre data-lang="text"><code>validate
+   ↓
+create persisted plan
+   ↓
+review exact targets, modules, configuration, risk, and plan hash
+   ↓
+record confirmation for that plan
+   ↓
+satisfy launch-key and dangerous-module policy
+   ↓
+start
+   ↓
+observe status, logs, events, sessions, and artifacts
+</code></pre>
+  <div class="callout note">
+    <strong>Plan hashes are intentional.</strong> Changing or recreating a plan
+    after review invalidates the meaning of the earlier approval. Review the new
+    plan and confirm it separately.
+  </div>
+  <p>
+    Keep human intent explicit in prompts. “Validate and show me the plan,”
+    “stop before confirmation,” and “do not write to the session” establish
+    useful boundaries, but enforcement remains in Hovel rather than relying on
+    prompt compliance. Read <a href="safety.html">Safety and Scope Guardrails</a>
+    for the complete trust model.
+  </p>
+
+  <h2 id="versions">Versions, upgrades, and offline installation</h2>
+  <p>
+    By default, the installer selects the exact version of the running Hovel
+    binary. Published Codex and OpenCode archives are fetched from the matching
+    GitHub release and verified against its <code>SHA256SUMS</code>. The package
+    manifest must also name the requested host and version.
+  </p>
+<pre data-lang="shell"><code># inspect what a different published version would do
+hovel agent install codex --version {{HOVEL_VERSION}} --dry-run
+
+# install that published version
+hovel agent install codex --version {{HOVEL_VERSION}}
+</code></pre>
+  <p>
+    Upgrade Hovel first, then rerun the same installation command. Identical
+    content is idempotent. If an existing Hovel-managed skill or configuration
+    differs, installation stops rather than silently overwriting local work.
+    Inspect the difference before choosing <code>--force</code>.
+  </p>
+
+  <h3 id="offline">Local and offline sources</h3>
+  <p>
+    <code>--source</code> accepts an unpacked host package or a previously
+    downloaded <code>.tar.gz</code>. The package manifest supplies and validates
+    its version, so <code>--source</code> and <code>--version</code> are mutually
+    exclusive.
+  </p>
+<pre data-lang="shell"><code>hovel agent install opencode \
+  --source ./hovel-agent-opencode-v{{HOVEL_VERSION}}.tar.gz
+
+hovel agent install codex \
+  --scope project \
+  --source ./unpacked-hovel-codex
+</code></pre>
+  <p>
+    Archive extraction rejects path traversal and symbolic links. Network
+    downloads are size-limited, checksum-verified, and cached under the user's
+    Hovel agent cache for repeat installation.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <dl>
+    <dt>The agent cannot see Hovel skills or tools</dt>
+    <dd>Restart the host, confirm you installed at the intended scope, and run the install command again with <code>--dry-run</code>. For project scope, launch the host from that project. Also verify that <code>hovel</code> is available to the host process.</dd>
+
+    <dt>The installer reports a conflicting skill or MCP entry</dt>
+    <dd>Hovel found non-identical existing content and refused to destroy it. Compare the existing path with the packaged version. If replacement is intentional, rerun with <code>--force</code>. Replaced files receive a neighboring <code>.hovel-backup</code> copy.</dd>
+
+    <dt>Claude or Codex reports that its native command is unavailable</dt>
+    <dd>Install that host's CLI and ensure it is available on <code>PATH</code>. Hovel deliberately delegates user-scoped plugin registration to the host instead of editing private package-manager state.</dd>
+
+    <dt>A published archive or checksum cannot be downloaded</dt>
+    <dd>Confirm that the Hovel version has a corresponding GitHub release. Use <code>--source</code> with a trusted local archive for disconnected environments.</dd>
+
+    <dt>The agent keeps using stale Hovel state</dt>
+    <dd>Ask it to reload the Hovel discovery or troubleshooting skill and take fresh catalog and workspace snapshots. Do not work around stale state with the generic command escape hatch.</dd>
+
+    <dt>A throw is waiting for approval</dt>
+    <dd>Inspect the pending throw and its missing approver identities. Launch-key policy intentionally waits for the live entities captured by the pending plan; it is not an installer failure.</dd>
+  </dl>
+
+  <h2 id="package-layout">Package and trust details</h2>
+  <p>
+    Every host artifact contains a <code>hovel-agent.json</code> manifest with the
+    package name, exact Hovel version, and intended host. The release also
+    publishes one <code>SHA256SUMS</code> file covering all three archives.
+  </p>
+<pre data-lang="text"><code>dist/agent/
+├── hovel-agent-claude-v{{HOVEL_VERSION}}.tar.gz
+├── hovel-agent-codex-v{{HOVEL_VERSION}}.tar.gz
+├── hovel-agent-opencode-v{{HOVEL_VERSION}}.tar.gz
+└── SHA256SUMS
+</code></pre>
+  <p>
+    Canonical content exists once under <code>agent/skills/</code>. Packaging
+    generates host-native layouts from that source, so fixes to safety or
+    workflow guidance cannot drift independently between hosts.
+  </p>
+
+  <h2 id="development">Packaging and release development</h2>
+  <p>
+    Contributors should edit canonical skills, packaging code, or manifests—not
+    generated archives. Run the agent scope while iterating and the full gate
+    before considering a repository-wide change complete:
+  </p>
+<pre data-lang="shell"><code>aspect hovel-check agent
+aspect hovel-release agent
+
+# full repository definition of done
+aspect hovel-check
+</code></pre>
+  <p>
+    <code>aspect hovel-release agent</code> materializes deterministic packages
+    under <code>dist/agent/</code>. The release updater synchronizes Hovel's version
+    into the Claude manifest and skill compatibility metadata. CI validates the
+    portable skill format, safety invariants, expected skill inventory, archive
+    structure, absence of links and traversal entries, and reproducible bytes.
+  </p>
+  <p>
+    Release tags publish the three archives and checksum manifest together. This
+    keeps the Hovel executable, its typed MCP behavior, and its official agent
+    operating guidance on one release train.
+  </p>
+</article>

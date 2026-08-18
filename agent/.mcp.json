@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hovel": {
+      "command": "hovel",
+      "args": ["mcp"]
+    }
+  }
+}

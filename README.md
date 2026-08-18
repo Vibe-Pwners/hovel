@@ -37,6 +37,15 @@ Contributors should read the
 partial-checkout behavior. The source for the book lives under
 [`docs/site/src/content/`](docs/site/src/content/).
 
+The official [Agent Integrations](docs/site/src/content/spec/agent-integrations.html)
+package Hovel skills and MCP configuration for Claude Code, Codex, and OpenCode:
+
+```sh
+hovel agent install claude
+hovel agent install codex
+hovel agent install opencode
+```
+
 ## Install
 
 The operator install is the `hovel` PyPI package. It contains the
@@ -95,6 +104,8 @@ Useful commands:
 | `aspect test --coverage` | Run core domain and application coverage ratchets. |
 | `aspect hovel-check` | Require a full checkout, then run the core, SDK, modules, and docs gates. |
 | `aspect hovel-check docs` | Build and validate the hermetic Astro documentation site. |
+| `aspect hovel-check agent` | Validate the portable skill suite and host packages. |
+| `aspect hovel-release agent` | Build versioned Claude, Codex, and OpenCode integration archives. |
 | `aspect run //docs/tools/docs:stage_site` | Materialize the documentation site under `_site/`. |
 
 ## Repository layout
@@ -107,6 +118,7 @@ The repository is organized for Sapling sparse profiles:
 | `sdk/` | Python, Go, and Rust module SDKs. These are intentionally outside core so SDK work can be checked out independently. |
 | `modules/` | In-repo example modules, Squatter payload/provider code, module packaging tools, and lab helpers. |
 | `docs/` | Pages source, book content, demos, and documentation tooling. |
+| `agent/` | Canonical Hovel Agent Skills and deterministic host-package tooling. |
 | `repo-tools/` | Repository-level helpers that must remain available in sparse checkouts. |
 
 ## Contributing

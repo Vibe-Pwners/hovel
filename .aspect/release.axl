@@ -16,6 +16,7 @@ def _impl(ctx: TaskContext) -> int:
         "modules": [(["run", "//modules/tools:package_examples"], root)],
         "picblobs": [(["run", "--bazel-flag=--config=picblobs_cross", "//modules/picblobs/tools:stage_blobs_release"], root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs", "--out-dir=modules/picblobs/dist/picblobs", "--clean", "--validate"] + ctx.args.release_args, root)],
         "picblobs-cli": [(["run", "--bazel-flag=--config=picblobs_cross", "//modules/picblobs/tools:stage_blobs"], root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs", "--out-dir=modules/picblobs/dist/picblobs", "--clean", "--validate"] + ctx.args.release_args, root), (["run", "//modules/picblobs/tools:build_dist", "--", "--package=picblobs-cli", "--out-dir=modules/picblobs/dist/picblobs-cli", "--clean", "--validate"] + ctx.args.release_args, root)],
+        "agent": [(["run", "//agent/tools:package_agent", "--", "--out-dir=dist/agent", "--clean"], root)],
     }
     if kind not in steps:
         print("unknown release kind: " + kind)
@@ -24,7 +25,7 @@ def _impl(ctx: TaskContext) -> int:
 
 hovel_release = task(
     args = {
-        "kind": args.positional(minimum = 1, maximum = 1, description = "Artifact family: hovel, sdk, modules, picblobs, or picblobs-cli."),
+        "kind": args.positional(minimum = 1, maximum = 1, description = "Artifact family: hovel, sdk, modules, picblobs, picblobs-cli, or agent."),
         "release_args": args.trailing_var_args(description = "Arguments forwarded to the distribution builder."),
     },
     summary = "Build a Hovel release artifact family without publishing it.",

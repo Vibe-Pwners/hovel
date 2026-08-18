@@ -15,11 +15,13 @@ exports_files([
     ".github/workflows/hovel-pypi.yml",
     ".github/workflows/hovel-sdk-pypi.yml",
     ".github/workflows/modules-release.yml",
+    ".github/workflows/agent-release.yml",
     ".github/workflows/pages.yml",
     ".github/workflows/picblobs-cli-pypi.yml",
     ".github/workflows/picblobs-pypi.yml",
     "LICENSE",
     "VERSION",
+    ".claude-plugin/marketplace.json",
     "go.work.bazel",
     "scripts/demo-mcp-agent-tmux.sh",
     "scripts/demo-step-setup.sh",
@@ -54,6 +56,11 @@ test_suite(
         "//tools/bazel/buildifier:buildifier_test",
         "//tools/bazel/policy:repo_policy_test",
     ],
+)
+
+test_suite(
+    name = "agent_test",
+    tests = ["//agent/tools:package_agent_test"],
 )
 
 test_suite(

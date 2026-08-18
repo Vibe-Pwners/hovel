@@ -71,7 +71,7 @@ or ffmpeg until they have a pinned execution toolchain.
 | `aspect test` | Run core Hovel binary workspace tests. |
 | `aspect test @hovel_core//internal/domain/...` | Run specific core tests from the root workspace. |
 | `aspect hovel-check` | Run the full non-publishing gate: repo, core, SDKs, examples, modules, and docs. |
-| `aspect hovel-check <scope>` | Run one of `repo`, `core`, `sdk`, `module-examples`, `modules`, or `docs`. |
+| `aspect hovel-check <scope>` | Run one of `repo`, `core`, `sdk`, `module-examples`, `modules`, `docs`, or `agent`. |
 | `aspect hovel-format` | Format all wired Go, Python, Rust, Gazelle, SDK, and module slices. |
 | `aspect test --coverage ...` | Collect coverage for explicitly selected test targets. Repository ratchets live in `hovel-check`. |
 | `aspect hovel <mode> [args]` | Run `cli`, `daemon`, `mcp`, `status`, `init`, `throw`, or `session` against the development workspace. |
@@ -81,7 +81,7 @@ or ffmpeg until they have a pinned execution toolchain.
 | `aspect hovel-site tidewave` | Run Astro HMR with the localhost-only Tidewave MCP endpoint at `/tidewave/mcp`. |
 | `aspect hovel-site preview` | Rebuild the deterministic assembled site and serve `_site/` on port 4322. |
 | `aspect hovel-report` | Run report-producing tests and build `_site/` with the latest evidence. |
-| `aspect hovel-release <kind>` | Build (without publishing) `hovel`, `sdk`, `modules`, `picblobs`, or `picblobs-cli` artifacts. |
+| `aspect hovel-release <kind>` | Build (without publishing) `hovel`, `sdk`, `modules`, `picblobs`, `picblobs-cli`, or `agent` artifacts. |
 | `aspect hovel-hooks` | Install or refresh the repository hooks. |
 
 ## Definition of done
