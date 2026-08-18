@@ -2,10 +2,10 @@
 name: hovel-artifacts
 description: Locate, inspect, and explain Hovel result artifacts while preserving their operation, chain, target, and audit context.
 license: Apache-2.0
-compatibility: Requires Hovel 0.3.x and a configured Hovel MCP server.
+compatibility: Requires Hovel 0.4.x and a configured Hovel MCP server.
 metadata:
-  hovel-min-version: "0.3.0"
-  hovel-max-version: "0.4.0"
+  hovel-min-version: "0.4.0"
+  hovel-max-version: "0.5.0"
 ---
 
 # Hovel artifacts

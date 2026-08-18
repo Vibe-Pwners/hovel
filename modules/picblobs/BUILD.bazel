@@ -1,10 +1,9 @@
 # picblobs — position-independent code blob library
 #
-# Build all blobs:     bazel build //modules/picblobs/src/payload:all
-# Lint C code:         bazel build --config=picblobs_lint //modules/picblobs/src/... //modules/picblobs/tests/...
-# Check formatting:    bazel test //modules/picblobs/tools:format_check
-# Check codegen:       bazel test //modules/picblobs/tools:generate_check
-# Run all checks:      bazel test //modules/picblobs/tools:all --config=picblobs_lint
+# Build all blobs:     aspect build //modules/picblobs/src/payload:all
+# Check formatting:    aspect test //modules/picblobs/tools:format_check
+# Check codegen:       aspect test //modules/picblobs/tools:generate_check
+# Run repository gate: aspect hovel-check modules
 
 load("@rules_python//python:defs.bzl", "py_library")
 
@@ -41,8 +40,6 @@ py_library(
 filegroup(
     name = "version_targets",
     srcs = [
-        ".github/workflows/picblobs.yml",
-        ".github/workflows/picblobs-cli.yml",
         "CLAUDE.md",
         "MODULE.bazel",
         "hovel-module.yaml",

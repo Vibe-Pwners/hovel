@@ -5,22 +5,7 @@ import sys
 from pathlib import Path
 
 
-FILES = {
-    (f"{Path(argument).parent.name}/{Path(argument).name}" if Path(argument).name == "action.yml" else Path(argument).name): Path(
-        argument
-    ).read_text(encoding="utf-8")
-    for argument in sys.argv[1:]
-}
-PUBLISHERS = {
-    "hovel-pypi.yml": ("hovel", "pypi", "startsWith(github.ref_name, 'v')"),
-    "hovel-sdk-pypi.yml": ("hovel-sdk", "pypi", "startsWith(github.ref_name, 'v')"),
-    "picblobs-pypi.yml": ("picblobs", "pypi-picblobs", "startsWith(github.ref_name, 'picblobs-v')"),
-    "picblobs-cli-pypi.yml": (
-        "picblobs-cli",
-        "pypi-picblobs-cli",
-        "startsWith(github.ref_name, 'picblobs-cli-v')",
-    ),
-}
+FILES = {Path(argument).name: Path(argument).read_text(encoding="utf-8") for argument in sys.argv[1:]}
 
 
 def test_every_remote_action_is_pinned_by_commit() -> None:
@@ -31,32 +16,44 @@ def test_every_remote_action_is_pinned_by_commit() -> None:
             assert re.search(r"@[0-9a-f]{40}$", action), (name, action)
 
 
-def test_publishers_keep_stable_trusted_publisher_identity() -> None:
-    for filename, (package, environment, tag_guard) in PUBLISHERS.items():
-        workflow = FILES[filename]
-        assert f"package: {package}" in workflow
+def test_release_is_tag_driven_and_ordered() -> None:
+    workflow = FILES["release.yml"]
+    assert 'tags: ["v*"]' in workflow
+    assert "release:" not in workflow.split("permissions:", 1)[0]
+    assert "aspect hovel-check" in workflow
+    assert "needs: [verify, build-picblobs, publish-picblobs]" in workflow
+    assert "needs: [publish-hovel, publish-sdk, publish-picblobs-cli, build-modules, build-agent]" in workflow
+    assert workflow.index("publish-picblobs:") < workflow.index("publish-picblobs-cli:")
+    assert workflow.index("publish-picblobs-cli:") < workflow.index("github-release:")
+
+
+def test_release_keeps_publisher_identities_and_minimal_permissions() -> None:
+    workflow = FILES["release.yml"]
+    for environment in ("pypi", "pypi-picblobs", "pypi-picblobs-cli"):
         assert f"environment: {environment}" in workflow
-        assert tag_guard in workflow
-        assert "id-token: write" in workflow
-        assert "pypa/gh-action-pypi-publish@" in workflow
-        assert "./.github/actions/build-python-package" in workflow
+    assert workflow.count("id-token: write") == 4
+    assert workflow.count("contents: write") == 1
+    assert workflow.count("pypa/gh-action-pypi-publish@") == 4
+    assert workflow.count("skip-existing: true") == 4
+    assert workflow.count("attestations: true") == 4
+    assert workflow.count("needs.verify.outputs.picblobs-changed == 'true'") == 4
 
 
-def test_shared_release_action_uses_only_aspect_build_entry_points() -> None:
-    action = FILES["build-python-package/action.yml"]
-    for package in PUBLISHERS.values():
-        assert package[0] in action
-    assert "aspect hovel-release hovel" in action
-    assert "aspect hovel-release sdk" in action
-    assert "aspect hovel-release picblobs" in action
-    assert "aspect hovel-release picblobs-cli" in action
-    assert "pip install" not in action
-    assert "setup-python" not in action
-    assert "setup-go" not in action
+def test_release_builds_and_smokes_only_through_aspect() -> None:
+    workflow = FILES["release.yml"]
+    for kind in ("hovel", "sdk", "picblobs-cli", "modules", "agent"):
+        assert f"aspect hovel-release {kind}" in workflow
+    assert workflow.count("release_tool -- smoke") == 4
+    assert "release_tool -- stage-assets" in workflow
+    assert "release_tool -- manifest" in workflow
+    assert workflow.count("release_tool -- verify-pypi") == 4
+    assert "pip install" not in workflow
+    assert "setup-python" not in workflow
+    assert "setup-go" not in workflow
 
 
 def test_repository_workflows_share_one_setup_action() -> None:
-    for filename in ("ci.yml", "modules-release.yml", "pages.yml"):
+    for filename in ("ci.yml", "pages.yml", "release.yml"):
         assert "./.github/actions/setup-hovel" in FILES[filename]
         assert "aspect-build/setup-aspect@" not in FILES[filename]
         assert "actions/cache@" not in FILES[filename]

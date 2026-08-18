@@ -9,16 +9,10 @@ nogo(
 
 exports_files([
     ".clang-format",
-    ".github/actions/build-python-package/action.yml",
     ".github/actions/setup-hovel/action.yml",
     ".github/workflows/ci.yml",
-    ".github/workflows/hovel-pypi.yml",
-    ".github/workflows/hovel-sdk-pypi.yml",
-    ".github/workflows/modules-release.yml",
-    ".github/workflows/agent-release.yml",
     ".github/workflows/pages.yml",
-    ".github/workflows/picblobs-cli-pypi.yml",
-    ".github/workflows/picblobs-pypi.yml",
+    ".github/workflows/release.yml",
     "LICENSE",
     "VERSION",
     ".claude-plugin/marketplace.json",
@@ -51,6 +45,7 @@ test_suite(
     name = "repo_quality_test",
     tests = [
         "//repo-tools/deps:update_python_locks_test",
+        "//repo-tools/release:release_tool_test",
         "//repo-tools/tasks:checkout_test",
         "//repo-tools/tasks:github_workflows_test",
         "//tools/bazel/buildifier:buildifier_test",

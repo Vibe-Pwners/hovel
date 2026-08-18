@@ -73,4 +73,34 @@
     throw planning, confirmation, dangerous-module checks, or audit events must retain
     the safety rules in <a href="safety.html">Safety and Guardrails</a>.
   </p>
+
+  <h2 id="release">Release procedure</h2>
+  <p>
+    Hovel releases are driven by an annotated <code>v*</code> tag whose version matches
+    the committed <code>VERSION</code>. The release workflow accepts the tag only when its
+    commit is contained in <code>main</code>, runs the complete non-publishing gate, builds
+    every artifact through Aspect, publishes Python distributions with trusted
+    publishing, and creates the GitHub Release last.
+  </p>
+<pre data-lang="shell"><code>aspect run //core/tools/release:upver -- 0.4.0
+aspect hovel-format
+aspect hovel-check
+
+# After merge and a successful build-only workflow dispatch on main:
+git tag -a v0.4.0 -m "Hovel v0.4.0"
+git push origin v0.4.0</code></pre>
+  <p>
+    Do not manually create the GitHub Release first. Rerun the same tag workflow after a
+    transient failure; publication verifies existing PyPI filenames and hashes rather
+    than replacing immutable files. Hovel and <code>hovel-sdk</code> share the Hovel
+    version. Picblobs and <code>picblobs-cli</code> retain their own synchronized version
+    and are published change-aware as part of the release train.
+  </p>
+  <p>
+    PyPI trusted publishers must name <code>release.yml</code>. Hovel projects use the
+    <code>pypi</code> environment; Picblobs projects use
+    <code>pypi-picblobs</code> and <code>pypi-picblobs-cli</code>. Only publishing jobs
+    receive OIDC permission, and only the terminal GitHub Release job receives repository
+    write permission.
+  </p>
 </article>

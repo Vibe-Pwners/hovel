@@ -2,10 +2,10 @@
 name: hovel-sessions
 description: Discover, inspect, read from, and deliberately interact with established Hovel sessions without launching new throws.
 license: Apache-2.0
-compatibility: Requires Hovel 0.3.x and a configured Hovel MCP server.
+compatibility: Requires Hovel 0.4.x and a configured Hovel MCP server.
 metadata:
-  hovel-min-version: "0.3.0"
-  hovel-max-version: "0.4.0"
+  hovel-min-version: "0.4.0"
+  hovel-max-version: "0.5.0"
 ---
 
 # Hovel sessions
