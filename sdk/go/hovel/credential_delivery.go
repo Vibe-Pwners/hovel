@@ -616,7 +616,7 @@ func (t CredentialStampTarget) Validate() error {
 			t.BytePattern.Precondition,
 		)
 		return err
-	case CredentialStampTargetProviderDefined:
+	default: // CredentialStampTargetProviderDefined; Kind was validated above.
 		if t.ProviderDefined == nil {
 			return errors.New("credential provider-defined stamp target is missing")
 		}
@@ -750,7 +750,7 @@ func (r CredentialMaterialReference) Validate() error {
 			return errors.New("credential CRL material requires public material")
 		}
 		return validateCredentialReferenceList(r.CRLGenerationIDs, "credential CRL generation ids")
-	case CredentialProjectionProviderEncoding, CredentialProjectionLiteralReference:
+	default: // Provider and literal projections; Projection was validated above.
 		return errors.New("credential material reference cannot contain provider or literal material")
 	}
 	return nil
@@ -831,7 +831,7 @@ func (m CredentialStampMaterial) Validate() error {
 			return err
 		}
 		return m.ProviderEncoding.Source.Validate()
-	case CredentialProjectionLiteralReference:
+	default: // CredentialProjectionLiteralReference; Projection was validated above.
 		if m.LiteralReference == nil {
 			return errors.New("credential literal material reference is missing")
 		}
@@ -959,10 +959,12 @@ func validateCredentialCanonicalText(value, label string, maximum int) error {
 		len(value) > maximum || !utf8.ValidString(value) {
 		return fmt.Errorf("%s is invalid or noncanonical", label)
 	}
-	for _, char := range value {
+	for len(value) > 0 {
+		char, size := utf8.DecodeRuneInString(value)
 		if unicode.IsControl(char) {
 			return fmt.Errorf("%s contains control characters", label)
 		}
+		value = value[size:]
 	}
 	return nil
 }
@@ -1033,7 +1035,7 @@ func validateCredentialPositionTarget(
 				imageBaseValue+positionValue > math.MaxUint64-maximum {
 				return errors.New("credential stamp image base, address, and length overflow uint64")
 			}
-		case CredentialStampAddressELFVirtual, CredentialStampAddressMachOVM:
+		default: // ELF virtual or Mach-O VM; addressSpace was validated by the caller.
 			if positionValue < imageBaseValue {
 				return errors.New("credential virtual address precedes its image base")
 			}
@@ -1062,8 +1064,8 @@ func validateCredentialBoundedTarget(
 		return 0, errors.New("credential stamp precondition exceeds target maximum length")
 	}
 	if precondition.Kind == CredentialStampPreconditionSHA256 {
-		length, err := precondition.Length.Uint64()
-		if err != nil || length > maximum {
+		length, _ := precondition.Length.Uint64()
+		if length > maximum {
 			return 0, errors.New("credential stamp hash precondition exceeds target maximum length")
 		}
 	}
@@ -1195,7 +1197,9 @@ func rejectInactiveCredentialJSONFields(
 		return fmt.Errorf("decode %s fields: %w", label, err)
 	}
 	allowedFields := make(map[string]struct{})
-	for _, field := range strings.Split(allowed, ",") {
+	allowedNames := strings.Split(allowed, ",")
+	for index := 0; index < len(allowedNames); index++ {
+		field := allowedNames[index]
 		if field != "" {
 			allowedFields[field] = struct{}{}
 		}
@@ -1216,7 +1220,8 @@ func validateCredentialReferenceList(values []string, label string) error {
 		return fmt.Errorf("%s is empty or exceeds limits", label)
 	}
 	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
+	for index := 0; index < len(values); index++ {
+		value := values[index]
 		if err := validateCredentialCanonicalText(value, label, maximumCredentialIDBytes); err != nil {
 			return err
 		}

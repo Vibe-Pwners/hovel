@@ -279,13 +279,15 @@
           <div>
             <span class="panel-kicker">Quality thresholds</span>
             <h2>Test coverage</h2>
-            <p>Ratchet-backed line metrics and the real-payload Squatter feature matrix.</p>
+            <p>Line and branch metrics with language, platform, and raw evidence provenance.</p>
           </div>
           <span class="result-count">${coverage.length} metrics</span>
         </div>
         <div class="coverage-grid">
           ${coverage.map((item) => {
             const percentage = Math.max(0, Math.min(100, Number(item.percentage || 0)));
+            const metricType = item.metric_type || "line";
+            const provenance = [item.language, ...(item.platforms || [])].filter(Boolean).join(" · ");
             const source = item.source_path
               ? `<a href="${escapeHtml(item.source_path)}">source evidence</a>`
               : `<span>source unavailable</span>`;
@@ -295,12 +297,12 @@
                   <span class="coverage-scope">${escapeHtml(item.scope)}</span>
                   ${statusBadge(item.status)}
                 </div>
-                <h3>${escapeHtml(item.name)}</h3>
+                <h3>${escapeHtml(item.name)} <small>${escapeHtml(metricType)}</small></h3>
                 <strong>${percentage.toFixed(2)}%</strong>
                 <div class="coverage-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}">
                   <span style="width: ${percentage}%"></span>
                 </div>
-                <p>${Number(item.covered || 0)} / ${Number(item.total || 0)} covered · minimum ${Number(item.minimum || 0).toFixed(2)}% · ${source}</p>
+                <p>${Number(item.covered || 0)} / ${Number(item.total || 0)} covered · minimum ${Number(item.minimum || 0).toFixed(2)}%${provenance ? ` · ${escapeHtml(provenance)}` : ""} · ${source}</p>
               </article>
             `;
           }).join("")}

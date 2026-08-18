@@ -45,14 +45,19 @@ type server struct {
 	sessions *sessionManager
 }
 
+var (
+	serveModuleIO = ServeIO
+	serveExit     = os.Exit
+)
+
 // Serve runs module over stdin/stdout until the daemon sends "shutdown" or the
 // stream closes. It is the entry point for every Go module's main function:
 //
 //	func main() { hovel.Serve(&MyModule{}) }
 func Serve(module Module) {
-	if err := ServeIO(module, os.Stdin, os.Stdout); err != nil {
+	if err := serveModuleIO(module, os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "hovel sdk error: %v\n", err)
-		os.Exit(2)
+		serveExit(2)
 	}
 }
 

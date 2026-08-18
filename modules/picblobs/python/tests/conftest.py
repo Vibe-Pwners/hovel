@@ -277,7 +277,11 @@ def _collection_filters() -> dict[str, str]:
 def _skip_marker_reason(keyword: str) -> str:
     """Return the human-facing skip reason for one capability marker."""
     reasons = {
-        "requires_blobs": "Blob assets are not staged. Run: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --",
+        "requires_blobs": (
+            "Blob assets are not staged. Run: aspect run "
+            "--bazel-flag=--config=picblobs_cross "
+            "//modules/picblobs/tools:stage_blobs --"
+        ),
         "requires_runners": (
             "Test runners not built. Run: bazel build "
             "//modules/picblobs/tests/runners/..."

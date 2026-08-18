@@ -166,11 +166,13 @@ def _resolve_disasm_so_path(
         if prefer_debug:
             _fail(
                 f"no debug .so found for {blob_type} {os_name}:{arch}; "
-                "stage with: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- --debug"
+                "stage with: aspect run --bazel-flag=--config=picblobs_cross "
+                "//modules/picblobs/tools:stage_blobs -- --debug"
             )
         _fail(
             f"no .so found for {blob_type} {os_name}:{arch}; "
-            "stage with: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --"
+            "stage with: aspect run --bazel-flag=--config=picblobs_cross "
+            "//modules/picblobs/tools:stage_blobs --"
         )
     return resolved
 
@@ -654,7 +656,9 @@ def list_runners(os_filter: str | None, arch_filter: str | None) -> None:
     root = runners_dir()
     if not root.exists():
         _fail(
-            f"runner bundle not found at {root}. Run aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- first."
+            f"runner bundle not found at {root}. Run aspect run "
+            "--bazel-flag=--config=picblobs_cross "
+            "//modules/picblobs/tools:stage_blobs -- first."
         )
 
     fmt = "{:<10s} {:<15s} {}"
@@ -1608,7 +1612,8 @@ def disasm(
     if not has_debug_info(str(resolved), objdump):
         _fail(
             f"no DWARF debug info in {resolved}; "
-            "stage with: aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- --debug"
+            "stage with: aspect run --bazel-flag=--config=picblobs_cross "
+            "//modules/picblobs/tools:stage_blobs -- --debug"
         )
     try:
         output = disassemble_function(

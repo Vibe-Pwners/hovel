@@ -19,4 +19,6 @@ tmp/
 docs/demo/out/
 docs/demo/tmp/
 coverage/
+!tools/coverage/
+!tools/coverage/**
 .test-report/

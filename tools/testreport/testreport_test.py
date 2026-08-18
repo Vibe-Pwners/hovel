@@ -74,7 +74,19 @@ class TestReportTest(unittest.TestCase):
             coverage_json = repo / "core/coverage/go.results.json"
             coverage_json.parent.mkdir(parents=True)
             coverage_json.write_text(
-                json.dumps([{"name": "domain", "covered": 80, "total": 100, "minimum": 75.0}]),
+                json.dumps(
+                    [
+                        {
+                            "name": "domain branches",
+                            "metric_type": "branch",
+                            "language": "go",
+                            "platforms": ["linux", "windows"],
+                            "covered": 80,
+                            "total": 100,
+                            "minimum": 75.0,
+                        }
+                    ]
+                ),
                 encoding="utf-8",
             )
             lcov = repo / "squatter.lcov"
@@ -119,6 +131,9 @@ class TestReportTest(unittest.TestCase):
             data = json.loads((out / "data/report.json").read_text(encoding="utf-8"))
 
             self.assertEqual([metric["percentage"] for metric in data["coverage"]], [80.0, 100.0, 91.0])
+            self.assertEqual(data["coverage"][0]["metric_type"], "branch")
+            self.assertEqual(data["coverage"][0]["language"], "go")
+            self.assertEqual(data["coverage"][0]["platforms"], ["linux", "windows"])
             self.assertEqual(data["jobs"][0]["status"], "PASSED")
             self.assertEqual((out / data["jobs"][0]["log_path"]).read_text(encoding="utf-8"), job_log.read_text())
             self.assertTrue(all((out / metric["source_path"]).is_file() for metric in data["coverage"]))

@@ -24,6 +24,8 @@ const (
 	MeshBridgeNetworkUDP MeshBridgeNetwork = "udp"
 )
 
+var meshBridgeDialContext = (&net.Dialer{}).DialContext
+
 // MeshBridgeNetwork selects the daemon-owned local socket adapter used by a
 // Mesh bridge. Provider-defined Mesh protocols remain opaque; this value only
 // describes the local TCP or UDP adapter returned by the daemon.
@@ -155,7 +157,7 @@ func DialMeshBridge(
 	if err != nil {
 		return nil, err
 	}
-	connection, err := (&net.Dialer{}).DialContext(
+	connection, err := meshBridgeDialContext(
 		ctx,
 		string(endpoint.LocalNetwork),
 		address,

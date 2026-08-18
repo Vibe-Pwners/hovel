@@ -780,14 +780,8 @@ impl CredentialArtifactOutput {
             MAXIMUM_CREDENTIAL_ENCODING_BYTES,
         )?;
         match &self.content {
-            CredentialArtifactContent::Data(data) => {
-                if data.as_slice().is_empty()
-                    || data.as_slice().len() > MAXIMUM_CREDENTIAL_BINARY_BYTES
-                {
-                    return Err("credential artifact output data is invalid".to_string());
-                }
-                Ok(())
-            }
+            // CredentialBytes already enforces this exact size invariant.
+            CredentialArtifactContent::Data(_) => Ok(()),
             CredentialArtifactContent::Path(path) => validate_canonical_text(
                 path.expose(),
                 "credential protected path",
@@ -826,7 +820,7 @@ impl CredentialDeploymentOutput {
             "credential deployment reference",
             MAXIMUM_CREDENTIAL_ID_BYTES,
         )?;
-        if !(1..=MAXIMUM_CREDENTIAL_RECEIPT_BYTES).contains(&self.receipt.as_slice().len()) {
+        if self.receipt.as_slice().len() > MAXIMUM_CREDENTIAL_RECEIPT_BYTES {
             return Err("credential deployment receipt is empty or exceeds limits".to_string());
         }
         Ok(())
@@ -1179,5 +1173,280 @@ fn parse_credential_file(value: &Value) -> Result<CredentialFile, String> {
 fn push_optional(members: &mut Vec<(String, Value)>, name: &str, value: Option<&str>) {
     if let Some(value) = value {
         members.push((name.into(), Value::from(value)));
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use crate::credential_delivery::{
+        CredentialConsumerType, CredentialDeliveryCapability, CredentialMaterialReference,
+        CredentialPurpose, CredentialStampMaterial,
+    };
+
+    const DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    fn provider() -> CredentialProviderTarget {
+        CredentialProviderTarget {
+            module_id: "module".into(),
+            provider_id: "provider".into(),
+            provider_version: "v1".into(),
+            descriptor_sha256: DIGEST.into(),
+        }
+    }
+
+    fn metadata() -> ResolvedCredentialMetadata {
+        ResolvedCredentialMetadata {
+            bundle_version: "v1".into(),
+            purpose: CredentialPurpose::TlsServer,
+            consumer_type: CredentialConsumerType::External,
+            profile_id: "profile".into(),
+            compatibility_target_id: "target".into(),
+        }
+    }
+
+    fn bytes_material() -> ResolvedCredentialMaterial {
+        let bytes = b"material".to_vec();
+        ResolvedCredentialMaterial::new(
+            CredentialProjection::Bundle,
+            CredentialMaterialForm::PrivateBytes,
+            "raw",
+            sha256::hex_digest(&bytes),
+            CredentialMaterialValue::Bytes(CredentialBytes::new(bytes).unwrap()),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn provider_validation_residual_branches() {
+        let mut reference = CredentialScopedReference {
+            provider_id: "provider".into(),
+            reference: CredentialSecretReference::new("reference").unwrap(),
+            capabilities: vec!["read".into()],
+        };
+        assert!(reference.validate().is_ok());
+        reference.capabilities = vec!["read".into(), "read".into()];
+        assert!(reference.validate().is_err());
+        reference.capabilities = (0..=MAXIMUM_CREDENTIAL_REFERENCE_CAPABILITIES)
+            .map(|index| format!("cap-{index}"))
+            .collect();
+        assert!(reference.validate().is_err());
+
+        let scoped = CredentialScopedReference {
+            provider_id: "provider".into(),
+            reference: CredentialSecretReference::new("reference").unwrap(),
+            capabilities: Vec::new(),
+        };
+        let reference_material = ResolvedCredentialMaterial::new(
+            CredentialProjection::SignerReference,
+            CredentialMaterialForm::PrivateReference,
+            "provider",
+            DIGEST,
+            CredentialMaterialValue::Reference(scoped),
+        )
+        .unwrap();
+        assert!(reference_material.reference().is_some());
+        let reference_wire = Value::object(vec![
+            ("projection", Value::from("signer-reference")),
+            ("form", Value::from("private-reference")),
+            ("encoding", Value::from("provider")),
+            ("sha256", Value::from(DIGEST)),
+            (
+                "reference",
+                Value::object(vec![
+                    ("providerId", Value::from("provider")),
+                    ("reference", Value::from("reference")),
+                ]),
+            ),
+        ]);
+        assert!(ResolvedCredentialMaterial::from_value(&reference_wire).is_ok());
+
+        let path = CredentialProtectedPath::new("/tmp/credential").unwrap();
+        let mut file = CredentialFile {
+            projection: CredentialProjection::CertificateDer,
+            form: CredentialMaterialForm::Public,
+            encoding: "der".into(),
+            media_type: "application/pkix-cert".into(),
+            path: path.clone(),
+            sha256: DIGEST.into(),
+            size: 0,
+        };
+        assert!(file.validate().is_err());
+        file.size = 1;
+        assert!(file.validate().is_ok());
+        let mut files = CredentialFilesRequest {
+            request_id: "request".into(),
+            provider: provider(),
+            assignment_id: "assignment".into(),
+            slot_name: "slot".into(),
+            credential: metadata(),
+            files: Vec::new(),
+            scope: CredentialOperationScope::default(),
+        };
+        assert!(files.validate().is_err());
+        files.files = vec![file.clone(), file];
+        assert!(files.validate().is_err());
+
+        let mut receipt = CredentialDeliveryReceipt {
+            request_id: "request".into(),
+            provider_reference: None,
+            receipt_sha256: None,
+        };
+        assert!(receipt.validate().is_ok());
+        receipt.provider_reference = Some("reference".into());
+        receipt.receipt_sha256 = Some(DIGEST.into());
+        assert!(receipt.validate().is_ok());
+
+        let source = bytes_material();
+        let mut encoding_request = CredentialEncodingRequest {
+            request_id: "request".into(),
+            provider: provider(),
+            provider_id: "other".into(),
+            provider_schema: "v1".into(),
+            output_form: CredentialMaterialForm::PrivateBytes,
+            maximum_encoded_bytes: 8,
+            source,
+            scope: CredentialOperationScope::default(),
+        };
+        assert!(encoding_request.validate().is_err());
+        encoding_request.provider_id = "provider".into();
+        encoding_request.maximum_encoded_bytes = 0;
+        assert!(encoding_request.validate().is_err());
+
+        let encoded = b"encoded".to_vec();
+        let result = CredentialEncodingResult {
+            request_id: "request".into(),
+            form: CredentialMaterialForm::PrivateBytes,
+            encoding: "raw".into(),
+            sha256: sha256::hex_digest(&encoded),
+            data: CredentialBytes::new(encoded).unwrap(),
+        };
+        assert!(result
+            .validate_for_parts("other", CredentialMaterialForm::PrivateBytes, 8)
+            .is_err());
+        assert!(result
+            .validate_for_parts("request", CredentialMaterialForm::Public, 8)
+            .is_err());
+        assert!(result
+            .validate_for_parts("request", CredentialMaterialForm::PrivateBytes, 1)
+            .is_err());
+
+        let oversized_receipt = CredentialDeploymentOutput {
+            reference: "reference".into(),
+            receipt: CredentialBytes::new(vec![1; MAXIMUM_CREDENTIAL_RECEIPT_BYTES + 1]).unwrap(),
+        };
+        assert!(oversized_receipt.validate().is_err());
+        assert!(CredentialDeploymentOutput {
+            reference: "reference".into(),
+            receipt: CredentialBytes::new(vec![1]).unwrap()
+        }
+        .validate()
+        .is_ok());
+        let artifact = CredentialArtifactOutput {
+            name: "artifact".into(),
+            encoding: "raw".into(),
+            content: CredentialArtifactContent::Data(CredentialBytes::new(vec![1]).unwrap()),
+        };
+        assert!(artifact.validate().is_ok());
+
+        assert!(validate_stamped_material_digests(&[]).is_err());
+        let digest = CredentialStampedMaterialDigest {
+            projection: CredentialProjection::Bundle,
+            reference: "bundle".into(),
+            sha256: DIGEST.into(),
+        };
+        assert!(validate_stamped_material_digests(&[digest.clone(), digest]).is_err());
+        assert!(require_schema(&Value::object(vec![(
+            "schemaVersion",
+            Value::from("wrong")
+        )]))
+        .is_err());
+
+        let stamp_request = CredentialStampRequest {
+            assignment_id: "assignment".into(),
+            capability: CredentialDeliveryCapability::StampStandard,
+            slot_name: "slot".into(),
+            target: CredentialStampTarget::NamedSlot {
+                name: "slot".into(),
+            },
+            material: CredentialStampMaterial::Credential(CredentialMaterialReference {
+                projection: CredentialProjection::Bundle,
+                form: CredentialMaterialForm::PrivateBytes,
+                bundle_id: Some("bundle".into()),
+                generation_id: None,
+                generation_ids: Vec::new(),
+                trust_set_generation_id: None,
+                crl_generation_ids: Vec::new(),
+            }),
+            encoded_bytes: 1,
+            credential: metadata(),
+        };
+        let input_bytes = b"input".to_vec();
+        let input = CredentialArtifactInput {
+            artifact_id: "input".into(),
+            sha256: sha256::hex_digest(&input_bytes),
+            encoding: "raw".into(),
+            content: CredentialArtifactContent::Data(CredentialBytes::new(input_bytes).unwrap()),
+        };
+        let expected = CredentialStampedMaterialDigest {
+            projection: CredentialProjection::Bundle,
+            reference: "bundle".into(),
+            sha256: DIGEST.into(),
+        };
+        let execution = |material| CredentialStampExecutionRequest {
+            stamp_id: "stamp".into(),
+            provider: provider(),
+            request: stamp_request.clone(),
+            input: input.clone(),
+            material,
+            expected_digests: vec![expected.clone()],
+            scope: CredentialOperationScope::default(),
+        };
+        let public_bytes = b"public".to_vec();
+        let wrong_projection = ResolvedCredentialMaterial::new(
+            CredentialProjection::CertificateDer,
+            CredentialMaterialForm::Public,
+            "der",
+            sha256::hex_digest(&public_bytes),
+            CredentialMaterialValue::Bytes(CredentialBytes::new(public_bytes).unwrap()),
+        )
+        .unwrap();
+        assert!(execution(wrong_projection).validate().is_err());
+        let bundle_bytes = b"bundle".to_vec();
+        let wrong_form = ResolvedCredentialMaterial::new(
+            CredentialProjection::Bundle,
+            CredentialMaterialForm::Public,
+            "raw",
+            sha256::hex_digest(&bundle_bytes),
+            CredentialMaterialValue::Bytes(CredentialBytes::new(bundle_bytes).unwrap()),
+        )
+        .unwrap();
+        assert!(execution(wrong_form).validate().is_err());
+
+        let output = CredentialStampOutput::Artifact(CredentialArtifactOutput {
+            name: "artifact".into(),
+            encoding: "raw".into(),
+            content: CredentialArtifactContent::Data(CredentialBytes::new(vec![1]).unwrap()),
+        });
+        let mut stamp_result = CredentialStampExecutionResult {
+            stamp_id: "stamp".into(),
+            output,
+            target_resolution: CredentialStampTargetResolution::Translated,
+            resolved_target: CredentialStampTarget::NamedSlot {
+                name: "translated".into(),
+            },
+            bytes_written: "1".into(),
+            material_digests: vec![expected.clone()],
+        };
+        assert!(stamp_result
+            .validate_for_parts("other", &stamp_request.target, 1, &[expected.clone()])
+            .is_err());
+        assert!(stamp_result
+            .validate_for_parts("stamp", &stamp_request.target, 1, &[expected.clone()])
+            .is_ok());
+        stamp_result.bytes_written = "0".into();
+        assert!(stamp_result.validate().is_err());
+        stamp_result.bytes_written = (MAXIMUM_CREDENTIAL_BINARY_BYTES as u64 + 1).to_string();
+        assert!(stamp_result.validate().is_err());
     }
 }

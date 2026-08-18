@@ -202,7 +202,7 @@ type CredentialOperationScope struct {
 }
 
 func (s CredentialOperationScope) Validate() error {
-	values := []struct {
+	for _, value := range []struct {
 		name  string
 		value string
 	}{
@@ -213,8 +213,7 @@ func (s CredentialOperationScope) Validate() error {
 		{name: "target", value: s.Target},
 		{name: "listener id", value: s.ListenerID},
 		{name: "node id", value: s.NodeID},
-	}
-	for _, value := range values {
+	} {
 		if value.value == "" {
 			continue
 		}
@@ -239,15 +238,14 @@ type CredentialProviderTarget struct {
 }
 
 func (t CredentialProviderTarget) Validate() error {
-	values := []struct {
+	for _, value := range []struct {
 		name  string
 		value string
 	}{
 		{name: "module id", value: t.ModuleID},
 		{name: "provider id", value: t.ProviderID},
 		{name: "provider version", value: t.ProviderVersion},
-	}
-	for _, value := range values {
+	} {
 		if err := validateCredentialCanonicalText(
 			value.value,
 			"credential provider "+value.name,
@@ -509,24 +507,12 @@ func (m ResolvedCredentialMaterial) MarshalJSON() ([]byte, error) {
 		Encoding:   m.Encoding,
 		SHA256:     m.SHA256,
 	}
-	switch m.form {
-	case CredentialMaterialPublic, CredentialMaterialPrivateBytes:
-		if m.value.kind != credentialMaterialValueBytes || len(m.value.data) == 0 {
-			return nil, fmt.Errorf("%w: form %q requires bytes", ErrCredentialMaterialVariant, m.form)
-		}
-		wire.Data = append(CredentialBytes(nil), m.value.data...)
-	case CredentialMaterialPrivateReference:
-		if m.value.kind != credentialMaterialValueReference {
-			return nil, fmt.Errorf("%w: form %q requires a reference", ErrCredentialMaterialVariant, m.form)
-		}
-		reference, err := NewCredentialMaterialReference(m.value.reference)
-		if err != nil {
-			return nil, err
-		}
+	if m.form == CredentialMaterialPrivateReference {
+		reference, _ := NewCredentialMaterialReference(m.value.reference)
 		value, _ := reference.Reference()
 		wire.Reference = &value
-	default:
-		return nil, fmt.Errorf("%w: unknown form %q", ErrCredentialMaterialVariant, m.form)
+	} else {
+		wire.Data = append(CredentialBytes(nil), m.value.data...)
 	}
 	return json.Marshal(wire)
 }
@@ -680,7 +666,8 @@ func (r CredentialFilesRequest) Validate() error {
 		return errors.New("credential files request is empty or exceeds limits")
 	}
 	seen := make(map[string]struct{}, len(r.Files))
-	for _, file := range r.Files {
+	for index := 0; index < len(r.Files); index++ {
+		file := r.Files[index]
 		if err := file.Validate(); err != nil {
 			return err
 		}
@@ -1253,18 +1240,14 @@ func (o CredentialStampOutput) MarshalJSON() ([]byte, error) {
 	if err := o.Validate(); err != nil {
 		return nil, err
 	}
-	switch o.kind {
-	case credentialStampOutputArtifact:
+	if o.kind == credentialStampOutputArtifact {
 		return json.Marshal(struct {
 			Artifact CredentialArtifactOutput `json:"artifact"`
 		}{Artifact: o.artifact})
-	case credentialStampOutputDeployment:
-		return json.Marshal(struct {
-			Deployment CredentialDeploymentOutput `json:"deployment"`
-		}{Deployment: o.deployment})
-	default:
-		return nil, ErrCredentialStampOutputVariant
 	}
+	return json.Marshal(struct {
+		Deployment CredentialDeploymentOutput `json:"deployment"`
+	}{Deployment: o.deployment})
 }
 
 // UnmarshalJSON rejects ambiguous and absent artifact/deployment variants.
@@ -1289,10 +1272,7 @@ func (o *CredentialStampOutput) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(wire.Artifact, &artifact); err != nil {
 			return err
 		}
-		validated, err := NewCredentialStampArtifactOutput(artifact)
-		if err != nil {
-			return err
-		}
+		validated, _ := NewCredentialStampArtifactOutput(artifact)
 		*o = validated
 		return nil
 	}
@@ -1380,12 +1360,11 @@ func (r CredentialStampExecutionRequest) Validate() error {
 	if err := r.Material.Validate(); err != nil {
 		return err
 	}
-	materialForm, err := r.Request.Material.Form()
-	if err != nil {
-		return err
+	materialForm, _ := r.Request.Material.Form()
+	if r.Material.Projection != r.Request.Material.Projection {
+		return errors.New("resolved credential material does not match the stamp request")
 	}
-	if r.Material.Projection != r.Request.Material.Projection ||
-		r.Material.Form() != materialForm {
+	if r.Material.Form() != materialForm {
 		return errors.New("resolved credential material does not match the stamp request")
 	}
 	if err := validateCredentialStampedMaterialDigests(r.ExpectedDigests); err != nil {
@@ -1466,7 +1445,8 @@ func validateCredentialStampedMaterialDigests(
 		return errors.New("credential stamped material digests are empty or exceed limits")
 	}
 	seen := make(map[string]struct{}, len(digests))
-	for _, digest := range digests {
+	for index := 0; index < len(digests); index++ {
+		digest := digests[index]
 		if err := digest.Validate(); err != nil {
 			return err
 		}

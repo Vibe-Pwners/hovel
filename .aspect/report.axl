@@ -4,8 +4,11 @@ def _impl(ctx: TaskContext) -> int:
     root = ctx.std.env.aspect_root_dir()
     return run_steps(ctx, [
         (["run", "//tools/testreport:run_lint_report", "--", "--output=.test-report/linters"], root),
+        (["run", "//tools/coverage:python_sdk_coverage"], root),
         (["test", "--bazel-flag=--test_strategy=standalone", "--bazel-flag=--nocache_test_results", "//:sdk_test", "//:module_examples_test", "//:modules_test", "//:docs_test"], root),
-        (["run", "//tools/testreport:render_report", "--", "--output=.test-report/evidence", "--scan-testlogs=bazel-testlogs", "--lint-report=.test-report/linters/report.json"], root),
+        (["run", "//tools/coverage:go_branch_inventory", "--", "--hits-root=bazel-testlogs"], root),
+        (["run", "//tools/coverage:rust_sdk_coverage"], root),
+        (["run", "//tools/testreport:render_report", "--", "--output=.test-report/evidence", "--scan-testlogs=bazel-testlogs", "--lint-report=.test-report/linters/report.json", "--coverage-json=coverage/python-sdk.results.json", "--coverage-json=coverage/go-sdk-branches.results.json", "--coverage-json=coverage/rust-sdk-branches.results.json"], root),
         (["run", "//docs/tools/docs:stage_site_with_report"], root),
     ])
 

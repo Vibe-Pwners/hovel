@@ -279,7 +279,8 @@ def find_runner(
     raise FileNotFoundError(
         f"Test runner not found for {runner_type}/{arch}. "
         f"Install picblobs-cli (pip install picblobs-cli) or run "
-        f"aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- from a source checkout."
+        "aspect run --bazel-flag=--config=picblobs_cross "
+        "//modules/picblobs/tools:stage_blobs -- from a source checkout."
     )
 
 
@@ -983,6 +984,8 @@ def run_so(*_args, **_kwargs) -> RunResult:
     """Fail explicitly: runtime .so extraction is not supported."""
     raise RuntimeError(
         "Runtime .so extraction is not supported. Generate sidecar artifacts "
-        "with aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- or tools/extract_release.py, then load blobs "
+        "with aspect run --bazel-flag=--config=picblobs_cross "
+        "//modules/picblobs/tools:stage_blobs -- or tools/extract_release.py, "
+        "then load blobs "
         "through picblobs.get_blob()."
     )

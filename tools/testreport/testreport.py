@@ -47,6 +47,9 @@ class TestTarget:
 class CoverageMetric:
     name: str
     scope: str
+    metric_type: str
+    language: str
+    platforms: list[str]
     covered: int
     total: int
     percentage: float
@@ -225,6 +228,9 @@ def ingest_coverage(
                 new_coverage_metric(
                     name=str(item.get("name", "coverage")),
                     scope=scope,
+                    metric_type=str(item.get("metric_type", "line")),
+                    language=str(item.get("language", "")),
+                    platforms=string_list(item.get("platforms", []), path, "coverage platforms"),
                     covered=int(item.get("covered", 0)),
                     total=int(item.get("total", 0)),
                     minimum=float(item.get("minimum", 0.0)),
@@ -240,6 +246,9 @@ def ingest_coverage(
             new_coverage_metric(
                 name=name,
                 scope="Modules",
+                metric_type="line",
+                language="go",
+                platforms=[],
                 covered=covered,
                 total=total,
                 minimum=minimum,
@@ -275,6 +284,9 @@ def ingest_jobs(files: list[Path], repo: Path, coverage: list[CoverageMetric]) -
                 new_coverage_metric(
                     name=str(item.get("name", "feature matrix")),
                     scope="E2E",
+                    metric_type=str(item.get("metric_type", "feature")),
+                    language=str(item.get("language", "")),
+                    platforms=string_list(item.get("platforms", []), path, "coverage platforms"),
                     covered=int(item.get("covered", 0)),
                     total=int(item.get("total", 0)),
                     minimum=float(item.get("minimum", 0.0)),
@@ -287,12 +299,27 @@ def ingest_jobs(files: list[Path], repo: Path, coverage: list[CoverageMetric]) -
 
 
 def new_coverage_metric(
-    *, name: str, scope: str, covered: int, total: int, minimum: float, source: Path, repo: Path
+    *,
+    name: str,
+    scope: str,
+    metric_type: str,
+    language: str,
+    platforms: list[str],
+    covered: int,
+    total: int,
+    minimum: float,
+    source: Path,
+    repo: Path,
 ) -> CoverageMetric:
+    if metric_type not in {"line", "branch", "condition", "feature"}:
+        raise ValueError(f"invalid coverage metric type {metric_type!r}: {source}")
     percentage = round((100.0 * covered / total) if total else 0.0, 2)
     return CoverageMetric(
         name=name,
         scope=scope,
+        metric_type=metric_type,
+        language=language,
+        platforms=platforms,
         covered=covered,
         total=total,
         percentage=percentage,
@@ -300,6 +327,12 @@ def new_coverage_metric(
         status="PASSED" if total > 0 and percentage >= minimum else "FAILED",
         raw_source_path=display_path(repo, source),
     )
+
+
+def string_list(value: Any, source: Path, description: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ValueError(f"{description} must be a list of non-empty strings: {source}")
+    return value
 
 
 def lcov_totals(report: str) -> tuple[int, int]:

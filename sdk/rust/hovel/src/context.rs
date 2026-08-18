@@ -172,6 +172,79 @@ fn unknown_session(id: &str) -> io::Error {
     )
 }
 
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    struct ProbeSession {
+        closed: bool,
+    }
+
+    impl Session for ProbeSession {
+        fn open(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+        fn write(&mut self, _: &[u8]) -> io::Result<()> {
+            Ok(())
+        }
+        fn read(&mut self, _: i64) -> io::Result<Vec<u8>> {
+            Ok(Vec::new())
+        }
+        fn close(&mut self, _: &str) -> io::Result<()> {
+            self.closed = true;
+            Ok(())
+        }
+        fn closed(&self) -> bool {
+            self.closed
+        }
+    }
+
+    fn scope() -> Scope {
+        Scope {
+            run_id: "run".into(),
+            module_id: "module".into(),
+            target: "target".into(),
+        }
+    }
+
+    #[test]
+    fn session_state_and_context_residual_branches() {
+        let mut emitter = Emitter::new(Box::new(io::sink()));
+        let closed = emitter
+            .open_session(
+                &scope(),
+                Box::new(ProbeSession { closed: true }),
+                SessionOptions::default(),
+            )
+            .unwrap();
+        assert!(emitter.session_read(&closed.id, 0).unwrap().1);
+        assert!(emitter.session_read(&closed.id, 0).unwrap().1);
+        assert!(emitter.session_close(&closed.id, "again").is_ok());
+
+        let active = emitter
+            .open_session(
+                &scope(),
+                Box::new(ProbeSession { closed: false }),
+                SessionOptions::default(),
+            )
+            .unwrap();
+        assert!(!emitter.session_read(&active.id, 0).unwrap().1);
+        emitter.session_close(&active.id, "done").unwrap();
+
+        let params = Value::object(vec![(
+            "inputs",
+            Value::object(vec![
+                ("integer", Value::Num(2.0)),
+                ("fraction", Value::Num(2.5)),
+            ]),
+        )]);
+        let mut context = Context::new(&mut emitter, "module", &params);
+        assert_eq!(context.input_str("integer", ""), "2");
+        assert_eq!(context.input_str("fraction", ""), "2.5");
+        context.info("empty fields", &[]);
+    }
+}
+
 /// Everything a module needs for one execution.
 pub struct Context<'a> {
     pub run_id: String,

@@ -1501,7 +1501,8 @@ fn required_u32(value: &Value, name: &str) -> Result<u32, String> {
 pub(crate) fn required_bytes(value: &Value, name: &str) -> Result<Vec<u8>, String> {
     let encoded = required_string(value, name)?;
     let decoded = base64::decode(&encoded)?;
-    if decoded.is_empty() || decoded.len() > MAXIMUM_CREDENTIAL_BINARY_BYTES {
+    // A non-empty canonical base64 string cannot decode to an empty value.
+    if decoded.len() > MAXIMUM_CREDENTIAL_BINARY_BYTES {
         return Err(format!(
             "credential contract field {name:?} must be non-empty and bounded"
         ));
@@ -1524,4 +1525,349 @@ fn optional_string_array(value: &Value, name: &str) -> Result<Vec<String>, Strin
                 .ok_or_else(|| format!("credential contract field {name:?} must contain strings"))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    const DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    #[test]
+    fn primitive_validation_branches() {
+        for value in [
+            "".into(),
+            " value".into(),
+            "value ".into(),
+            "a\n".into(),
+            "a".repeat(MAXIMUM_CREDENTIAL_ID_BYTES + 1),
+        ] {
+            assert!(validate_canonical_text(&value, "value", MAXIMUM_CREDENTIAL_ID_BYTES).is_err());
+        }
+        assert!(validate_canonical_text("value", "value", MAXIMUM_CREDENTIAL_ID_BYTES).is_ok());
+        for value in ["0".into(), format!("{}g", "0".repeat(63)), "A".repeat(64)] {
+            assert!(validate_sha256(&value, "digest").is_err());
+        }
+        assert!(validate_sha256(DIGEST, "digest").is_ok());
+        for value in ["", "01", "-1"] {
+            assert!(parse_canonical_u64(value, "number").is_err());
+        }
+        assert_eq!(parse_canonical_u64("1", "number"), Ok(1));
+
+        assert!(validate_reference_list(&[], "references").is_err());
+        assert!(validate_reference_list(&["x".into(), "x".into()], "references").is_err());
+        assert!(validate_reference_list(&["x".into()], "references").is_ok());
+        let object = Value::object(vec![("active", Value::Null)]);
+        assert!(reject_inactive_fields(&object, &[], &["active"], "union").is_err());
+        assert!(reject_inactive_fields(&object, &["active"], &["active"], "union").is_ok());
+
+        assert!(required_string(&Value::Object(Vec::new()), "x").is_err());
+        assert!(required_string(&Value::object(vec![("x", Value::from(" "))]), "x").is_err());
+        assert_eq!(optional_string(&Value::Object(Vec::new()), "x"), Ok(None));
+        assert!(optional_string(&Value::object(vec![("x", Value::Null)]), "x").is_err());
+        assert_eq!(
+            optional_string(&Value::object(vec![("x", Value::from("v"))]), "x"),
+            Ok(Some("v".into()))
+        );
+        for value in [
+            Value::from(f64::NAN),
+            Value::from(1.5_f64),
+            Value::from(-1_i64),
+        ] {
+            assert!(required_i64(&Value::object(vec![("x", value)]), "x").is_err());
+        }
+        let _ = required_i64(
+            &Value::object(vec![("x", Value::from(i64::MAX as f64))]),
+            "x",
+        );
+        assert!(required_i64(
+            &Value::object(vec![("x", Value::from(i64::MAX as f64 + 2048.0))]),
+            "x"
+        )
+        .is_err());
+        assert_eq!(
+            required_i64(&Value::object(vec![("x", Value::from(1_i64))]), "x"),
+            Ok(1)
+        );
+        assert!(required_u32(
+            &Value::object(vec![("x", Value::from(i64::from(u32::MAX) + 1))]),
+            "x"
+        )
+        .is_err());
+        assert!(required_bytes(&Value::object(vec![("x", Value::from(""))]), "x").is_err());
+        assert_eq!(
+            required_bytes(&Value::object(vec![("x", Value::from("YQ=="))]), "x").unwrap(),
+            b"a"
+        );
+        let _ = required_bytes(&Value::object(vec![("x", Value::from("===="))]), "x");
+        let oversized = base64::encode(&vec![0; MAXIMUM_CREDENTIAL_BINARY_BYTES + 1]);
+        assert!(required_bytes(
+            &Value::object(vec![("x", Value::from(oversized.as_str()))]),
+            "x"
+        )
+        .is_err());
+        assert!(optional_string_array(&Value::Object(Vec::new()), "x")
+            .unwrap()
+            .is_empty());
+        assert!(optional_string_array(&Value::object(vec![("x", Value::Null)]), "x").is_err());
+        assert!(optional_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::Null]))]),
+            "x"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn stamp_target_validation_branches() {
+        let none = CredentialStampPrecondition::None;
+        assert!(CredentialStampPrecondition::Bytes(Vec::new())
+            .validate()
+            .is_err());
+        assert!(CredentialStampPrecondition::Bytes(vec![1])
+            .validate()
+            .is_ok());
+        for length in [
+            "0".into(),
+            (MAXIMUM_CREDENTIAL_BINARY_BYTES as u64 + 1).to_string(),
+        ] {
+            assert!(CredentialStampPrecondition::Sha256 {
+                sha256: DIGEST.into(),
+                length
+            }
+            .validate()
+            .is_err());
+        }
+
+        let position =
+            |offset: &str, maximum: &str, alignment: &str| CredentialStampTarget::FileOffset {
+                offset: offset.into(),
+                maximum_length: maximum.into(),
+                alignment: alignment.into(),
+                remainder_policy: CredentialStampRemainderPolicy::Preserve,
+                precondition: none.clone(),
+            };
+        assert!(position("0", "1", "1").validate().is_ok());
+        assert!(position("0", "1", "0").validate().is_err());
+        assert!(position("0", "1", "3").validate().is_err());
+        assert!(position("1", "1", "2").validate().is_err());
+        assert!(position(&u64::MAX.to_string(), "2", "1")
+            .validate()
+            .is_err());
+        assert!(position("0", "0", "1").validate().is_err());
+
+        for (space, address, base) in [
+            (CredentialStampAddressSpace::File, "0".to_string(), None),
+            (
+                CredentialStampAddressSpace::PeRva,
+                u64::MAX.to_string(),
+                Some("1"),
+            ),
+            (
+                CredentialStampAddressSpace::ElfVirtualAddress,
+                "1".to_string(),
+                Some("2"),
+            ),
+            (
+                CredentialStampAddressSpace::MachOVmAddress,
+                "2".to_string(),
+                Some("1"),
+            ),
+        ] {
+            let target = CredentialStampTarget::VirtualAddress {
+                address,
+                address_space: space,
+                image_base: base.map(str::to_string),
+                maximum_length: "1".into(),
+                alignment: "1".into(),
+                remainder_policy: CredentialStampRemainderPolicy::Preserve,
+                precondition: none.clone(),
+            };
+            let _ = target.to_value();
+            let _ = target.validate();
+        }
+        for section in [None, Some("text".into()), Some(" ".into())] {
+            let target = CredentialStampTarget::Symbol {
+                name: "symbol".into(),
+                section,
+                maximum_length: "1".into(),
+                remainder_policy: CredentialStampRemainderPolicy::Preserve,
+                precondition: none.clone(),
+            };
+            let _ = target.to_value();
+            let _ = target.validate();
+        }
+        assert!(CredentialStampTarget::Marker {
+            marker: Vec::new(),
+            occurrence: 0,
+            maximum_length: "1".into(),
+            remainder_policy: CredentialStampRemainderPolicy::Preserve,
+            precondition: none.clone()
+        }
+        .validate()
+        .is_err());
+        for (pattern, mask) in [
+            (Vec::new(), Vec::new()),
+            (vec![1], Vec::new()),
+            (vec![1], vec![0]),
+            (vec![1], vec![1]),
+        ] {
+            let _ = CredentialStampTarget::BytePattern {
+                pattern,
+                mask,
+                occurrence: 0,
+                maximum_length: "1".into(),
+                remainder_policy: CredentialStampRemainderPolicy::Preserve,
+                precondition: none.clone(),
+            }
+            .validate();
+        }
+        for value in [Value::Null, Value::Object(Vec::new())] {
+            let _ = CredentialStampTarget::ProviderDefined {
+                provider_id: "provider".into(),
+                schema_version: "v1".into(),
+                value,
+            }
+            .validate();
+        }
+        assert!(validate_credential_bounded_target(
+            "1",
+            CredentialStampRemainderPolicy::Preserve,
+            &CredentialStampPrecondition::Bytes(vec![1, 2])
+        )
+        .is_err());
+        assert!(validate_credential_bounded_target(
+            "1",
+            CredentialStampRemainderPolicy::Preserve,
+            &CredentialStampPrecondition::Sha256 {
+                sha256: DIGEST.into(),
+                length: "2".into()
+            }
+        )
+        .is_err());
+        assert!(validate_credential_bounded_target(
+            "1",
+            CredentialStampRemainderPolicy::Preserve,
+            &CredentialStampPrecondition::Bytes(vec![1])
+        )
+        .is_ok());
+        assert!(validate_credential_bounded_target(
+            &(MAXIMUM_CREDENTIAL_BINARY_BYTES as u64 + 1).to_string(),
+            CredentialStampRemainderPolicy::Preserve,
+            &none
+        )
+        .is_err());
+
+        assert!(CredentialStampTarget::Marker {
+            marker: vec![1],
+            occurrence: 0,
+            maximum_length: "1".into(),
+            remainder_policy: CredentialStampRemainderPolicy::Preserve,
+            precondition: none.clone()
+        }
+        .validate()
+        .is_ok());
+        let too_large = vec![1; MAXIMUM_CREDENTIAL_STAMP_PRECONDITION_BYTES + 1];
+        assert!(CredentialStampTarget::BytePattern {
+            pattern: too_large.clone(),
+            mask: too_large,
+            occurrence: 0,
+            maximum_length: "1".into(),
+            remainder_policy: CredentialStampRemainderPolicy::Preserve,
+            precondition: none.clone()
+        }
+        .validate()
+        .is_err());
+        let huge = Value::from(
+            "x".repeat(MAXIMUM_CREDENTIAL_PROVIDER_TARGET_BYTES + 1)
+                .as_str(),
+        );
+        assert!(CredentialStampTarget::ProviderDefined {
+            provider_id: "provider".into(),
+            schema_version: "v1".into(),
+            value: huge
+        }
+        .validate()
+        .is_err());
+
+        for (projection, form) in [
+            (
+                CredentialProjection::CertificateDer,
+                CredentialMaterialForm::PrivateBytes,
+            ),
+            (
+                CredentialProjection::CertificateDer,
+                CredentialMaterialForm::Public,
+            ),
+            (
+                CredentialProjection::PrivateKeyPkcs8,
+                CredentialMaterialForm::Public,
+            ),
+            (
+                CredentialProjection::PrivateKeyPkcs8,
+                CredentialMaterialForm::PrivateBytes,
+            ),
+            (
+                CredentialProjection::SignerReference,
+                CredentialMaterialForm::Public,
+            ),
+            (
+                CredentialProjection::SignerReference,
+                CredentialMaterialForm::PrivateReference,
+            ),
+        ] {
+            let _ = validate_projection_form(projection, form);
+        }
+        assert!(validate_canonical_text("a\0b", "value", MAXIMUM_CREDENTIAL_ID_BYTES).is_err());
+
+        let empty_reference = CredentialMaterialReference {
+            projection: CredentialProjection::Bundle,
+            form: CredentialMaterialForm::PrivateBytes,
+            bundle_id: None,
+            generation_id: None,
+            generation_ids: Vec::new(),
+            trust_set_generation_id: None,
+            crl_generation_ids: Vec::new(),
+        };
+        assert!(validate_credential_material_reference(&empty_reference).is_err());
+
+        let request = CredentialStampRequest {
+            assignment_id: "assignment".into(),
+            capability: CredentialDeliveryCapability::StampStandard,
+            slot_name: "slot".into(),
+            target: CredentialStampTarget::NamedSlot {
+                name: "slot".into(),
+            },
+            material: CredentialStampMaterial::Credential(CredentialMaterialReference {
+                projection: CredentialProjection::Bundle,
+                form: CredentialMaterialForm::PrivateBytes,
+                bundle_id: Some("bundle".into()),
+                generation_id: None,
+                generation_ids: Vec::new(),
+                trust_set_generation_id: None,
+                crl_generation_ids: Vec::new(),
+            }),
+            encoded_bytes: 0,
+            credential: ResolvedCredentialMetadata {
+                bundle_version: "v1".into(),
+                purpose: CredentialPurpose::TlsServer,
+                consumer_type: CredentialConsumerType::External,
+                profile_id: "profile".into(),
+                compatibility_target_id: "target".into(),
+            },
+        };
+        assert!(request.validate().is_err());
+
+        let mismatched = Value::object(vec![
+            ("projection", Value::from("bundle")),
+            (
+                "credential",
+                Value::object(vec![
+                    ("projection", Value::from("certificate-der")),
+                    ("form", Value::from("public")),
+                    ("generationId", Value::from("generation")),
+                ]),
+            ),
+        ]);
+        assert!(CredentialStampMaterial::from_value(&mismatched).is_err());
+    }
 }

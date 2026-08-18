@@ -1,0 +1,10 @@
+{
+  "contract": "hovel.module.rpc.v1",
+  "requests": [
+    {"jsonrpc": "2.0", "id": 1, "method": "handshake"},
+    {"jsonrpc": "2.0", "id": 2, "method": "schema"},
+    {"jsonrpc": "2.0", "id": 3, "method": "execute", "params": {"runId": "compat-run", "moduleId": "contract-probe", "target": "mock://compat", "inputs": {"probe.value": "fixture"}, "futureOptionalField": "ignored"}},
+    {"jsonrpc": "2.0", "id": 4, "method": "does.not.exist"},
+    {"jsonrpc": "2.0", "id": 5, "method": "shutdown"}
+  ]
+}

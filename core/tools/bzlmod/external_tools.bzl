@@ -99,6 +99,25 @@ filegroup(
         ":clang_tidy_runtime",
     ],
 )
+
+filegroup(
+    name = "llvm_cov_bin",
+    srcs = ["bin/llvm-cov"],
+)
+
+filegroup(
+    name = "llvm_profdata_bin",
+    srcs = ["bin/llvm-profdata"],
+)
+
+filegroup(
+    name = "llvm_coverage_files",
+    srcs = [
+        ":llvm_cov_bin",
+        ":llvm_profdata_bin",
+        ":clang_tidy_runtime",
+    ],
+)
 """
 
 _TOOLS = {

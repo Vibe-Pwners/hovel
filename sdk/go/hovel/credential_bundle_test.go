@@ -11,8 +11,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -124,10 +126,161 @@ func TestCredentialBundleValidateAtEnforcesPurposeAndTrust(t *testing.T) {
 	}
 }
 
+func TestCredentialBundleWireAndHelperFailures(t *testing.T) {
+	if _, err := DecodeCredentialBundleJSON(nil); err == nil {
+		t.Fatal("empty JSON accepted")
+	}
+	if _, err := DecodeCredentialBundleJSON([]byte(`{}`)); err == nil {
+		t.Fatal("invalid bundle accepted")
+	}
+	if _, err := DecodeCredentialBundleJSON([]byte(`{} {}`)); err == nil {
+		t.Fatal("trailing JSON accepted")
+	}
+	var nilBundle *CredentialBundle
+	nilBundle.Clear()
+	if got := fmt.Sprintf("%s %#v", CredentialBundle{}, CredentialBundle{}); got != "<credential bundle redacted> <credential bundle redacted>" {
+		t.Fatalf("redaction = %q", got)
+	}
+
+	validBinary := CredentialBundleBinary{MediaType: CredentialBundleMediaCertificate, Encoding: CredentialBundleEncodingBase64DER, Data: []byte{1}}
+	for _, tc := range []struct {
+		binary CredentialBundleBinary
+		media  string
+		valid  bool
+	}{
+		{validBinary, CredentialBundleMediaCertificate, true},
+		{CredentialBundleBinary{MediaType: CredentialBundleMediaPublicKey, Encoding: CredentialBundleEncodingBase64DER, Data: []byte{1}}, CredentialBundleMediaPublicKey, true},
+		{CredentialBundleBinary{MediaType: CredentialBundleMediaPrivateKey, Encoding: CredentialBundleEncodingBase64DER, Data: []byte{1}}, CredentialBundleMediaPrivateKey, true},
+		{CredentialBundleBinary{MediaType: CredentialBundleMediaCRL, Encoding: CredentialBundleEncodingBase64DER, Data: []byte{1}}, CredentialBundleMediaCRL, true},
+		{CredentialBundleBinary{}, CredentialBundleMediaCertificate, false},
+		{CredentialBundleBinary{MediaType: "bad", Encoding: CredentialBundleEncodingBase64DER, Data: []byte{1}}, CredentialBundleMediaCertificate, false},
+		{CredentialBundleBinary{MediaType: CredentialBundleMediaCertificate, Encoding: "bad", Data: []byte{1}}, CredentialBundleMediaCertificate, false},
+	} {
+		_, err := validateCredentialBundleBinary(tc.binary, tc.media, "test")
+		if (err == nil) != tc.valid {
+			t.Fatalf("binary %#v error = %v", tc, err)
+		}
+	}
+	if _, err := parseCredentialBundleCertificate([]byte{1}, "test"); err == nil {
+		t.Fatal("bad certificate accepted")
+	}
+	if err := validateCredentialBundleFingerprint("bad", []byte{1}, "test"); err == nil {
+		t.Fatal("bad digest accepted")
+	}
+	if err := validateCredentialBundleFingerprint(strings.Repeat("A", 64), []byte{1}, "test"); err == nil {
+		t.Fatal("uppercase digest accepted")
+	}
+	if err := validateCredentialBundleFingerprint(strings.Repeat("z", 64), []byte{1}, "test"); err == nil {
+		t.Fatal("nonhex digest accepted")
+	}
+	if err := validateCredentialBundleFingerprint(strings.Repeat("0", 64), []byte{1}, "test"); err == nil {
+		t.Fatal("wrong digest accepted")
+	}
+}
+
+func TestCredentialBundleKeyEstablishmentContract(t *testing.T) {
+	valid := []struct {
+		policy string
+		groups []string
+	}{
+		{CredentialKeyEstablishmentNotApplicable, nil},
+		{CredentialKeyEstablishmentClassicalCompatible, []string{"x25519"}},
+		{CredentialKeyEstablishmentHybridPQPreferred, []string{"x25519", "x25519-mlkem768"}},
+		{CredentialKeyEstablishmentHybridPQRequired, []string{"x25519-mlkem768"}},
+	}
+	for _, tc := range valid {
+		if err := validateCredentialKeyEstablishment(tc.policy, tc.groups); err != nil {
+			t.Fatalf("%#v: %v", tc, err)
+		}
+	}
+	invalid := []struct {
+		policy string
+		groups []string
+	}{
+		{"bad", nil}, {CredentialKeyEstablishmentNotApplicable, []string{"x25519"}},
+		{CredentialKeyEstablishmentClassicalCompatible, nil}, {CredentialKeyEstablishmentClassicalCompatible, []string{"x25519-mlkem768"}},
+		{CredentialKeyEstablishmentHybridPQPreferred, []string{"x25519"}}, {CredentialKeyEstablishmentHybridPQPreferred, []string{"x25519-mlkem768"}},
+		{CredentialKeyEstablishmentHybridPQRequired, nil}, {CredentialKeyEstablishmentHybridPQRequired, []string{"x25519"}},
+		{CredentialKeyEstablishmentClassicalCompatible, []string{"bad"}}, {CredentialKeyEstablishmentClassicalCompatible, []string{"x25519", "x25519"}},
+	}
+	for _, tc := range invalid {
+		if err := validateCredentialKeyEstablishment(tc.policy, tc.groups); err == nil {
+			t.Fatalf("accepted %#v", tc)
+		}
+	}
+	groups := []string{"x25519-mlkem768", "secp256r1-mlkem768", "secp384r1-mlkem1024", "x25519", "secp256r1", "secp384r1", "secp521r1"}
+	if curves, err := credentialBundleTLSCurves(groups); err != nil || len(curves) != len(groups) {
+		t.Fatalf("curves = %#v, %v", curves, err)
+	}
+	if _, err := credentialBundleTLSCurves([]string{"bad"}); err == nil {
+		t.Fatal("bad group accepted")
+	}
+}
+
+func TestCredentialBundleValidationMutations(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	mutations := []func(*CredentialBundle){
+		func(b *CredentialBundle) { b.SchemaVersion = "bad" }, func(b *CredentialBundle) { b.ID = "" },
+		func(b *CredentialBundle) { b.AssignmentID = " bad" }, func(b *CredentialBundle) { b.Generation = 0 },
+		func(b *CredentialBundle) { b.Purpose = "bad" }, func(b *CredentialBundle) { b.KeyEstablishmentPolicy = "bad" },
+		func(b *CredentialBundle) { b.Certificate.Data = []byte{1} }, func(b *CredentialBundle) { b.PublicKey.Data = []byte{1} },
+		func(b *CredentialBundle) { b.PublicKey.Data = append(CredentialBytes(nil), b.Certificate.Data...) },
+		func(b *CredentialBundle) { b.Fingerprints.CertificateSHA256 = "bad" }, func(b *CredentialBundle) { b.Fingerprints.PublicKeySHA256 = strings.Repeat("0", 64) },
+		func(b *CredentialBundle) {
+			b.PrivateKeyRef = &CredentialBundleKeyReference{KeyID: "key", ProviderID: "provider"}
+		},
+		func(b *CredentialBundle) { b.PrivateKey.Data = []byte{1} },
+		func(b *CredentialBundle) { b.NotBefore = time.Time{} }, func(b *CredentialBundle) { b.NotAfter = b.NotBefore },
+		func(b *CredentialBundle) { b.NotAfter = b.NotAfter.Add(time.Second) },
+	}
+	for index, mutate := range mutations {
+		bundle, _ := testCredentialBundle(t, now)
+		mutate(&bundle)
+		if err := bundle.Validate(); err == nil {
+			t.Fatalf("mutation %d accepted", index)
+		}
+	}
+	bundle, _ := testCredentialBundle(t, now)
+	bundle.PrivateKey = nil
+	bundle.PrivateKeyRef = &CredentialBundleKeyReference{KeyID: "key", ProviderID: "provider", Capabilities: []string{"sign"}}
+	if err := bundle.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*CredentialBundleKeyReference){
+		func(r *CredentialBundleKeyReference) { r.KeyID = "" }, func(r *CredentialBundleKeyReference) { r.ProviderID = "" },
+		func(r *CredentialBundleKeyReference) { r.Capabilities = []string{"x", "x"} }, func(r *CredentialBundleKeyReference) { r.Capabilities = []string{"\n"} },
+	} {
+		candidate := bundle
+		ref := *bundle.PrivateKeyRef
+		candidate.PrivateKeyRef = &ref
+		mutate(&ref)
+		if err := candidate.Validate(); err == nil {
+			t.Fatalf("reference mutation accepted: %#v", ref)
+		}
+	}
+	if err := bundle.ValidateAt(time.Time{}); err == nil {
+		t.Fatal("zero verification time accepted")
+	}
+	if err := bundle.ValidateAt(now.Add(-2 * time.Hour)); err == nil {
+		t.Fatal("premature bundle accepted")
+	}
+	if _, err := bundle.TLSServerConfigAt(now); err == nil {
+		t.Fatal("reference-only server key accepted")
+	}
+}
+
 func testCredentialBundle(
 	t *testing.T,
 	now time.Time,
 ) (CredentialBundle, *x509.Certificate) {
+	bundle, root, _ := testCredentialBundleWithRootKey(t, now)
+	return bundle, root
+}
+
+func testCredentialBundleWithRootKey(
+	t *testing.T,
+	now time.Time,
+) (CredentialBundle, *x509.Certificate, *ecdsa.PrivateKey) {
 	t.Helper()
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -222,5 +375,5 @@ func testCredentialBundle(
 		},
 		NotBefore: leaf.NotBefore,
 		NotAfter:  leaf.NotAfter,
-	}, root
+	}, root, rootKey
 }

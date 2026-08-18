@@ -12,10 +12,19 @@ Refresh the baseline only for an intentional, compatibility-reviewed expansion:
 aspect run //sdk/compat:public_api_baseline_test -- --print
 ```
 
-The source baseline is one layer of the contract. Existing SDK and module-example
-tests also exercise lifecycle calls, request/response encoding, sessions, mesh,
-credentials, and packaging. Before declaring the interface 1.0.0, add shared
-language-neutral wire fixtures and execute them against all three SDKs; add
-old-module/new-runtime black-box fixtures; and publish explicit rules for default
-values, unknown fields, error payloads, and capability negotiation. Those areas
-are behavioral contracts and cannot be proven by source signatures alone.
+`public_api_contract_digests.json` additionally freezes the complete extracted
+surface, including Python package exports and method return annotations and
+canonical Go receiver names. Inspect proposed changes with `--print-digests` and
+update a digest only after confirming that the change is additive and intended.
+
+The source baseline is one layer of the contract. The shared
+`protocol_contract_v1.json` corpus runs against deterministic Python, Go, and
+Rust SDK consumers and a dependency-free module frozen at the 0.3.2
+compatibility floor. It protects framing, handshake, schema, execution,
+unknown-method errors, ignored additive request fields, and shutdown behavior.
+
+The probe sources are compatibility fixtures, not examples: do not update their
+SDK calls merely to accommodate a refactor. Extend them additively when a new
+capability becomes part of the intended 1.0 contract. Existing SDK tests retain
+the deeper coverage for sessions, steps, mesh, credentials, payloads, malformed
+frames, and validation behavior.

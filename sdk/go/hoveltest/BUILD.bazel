@@ -1,4 +1,5 @@
 load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("//tools/coverage:go_branch.bzl", "go_branch_sources")
 
 filegroup(
     name = "sources",
@@ -17,9 +18,36 @@ go_library(
 go_test(
     name = "hoveltest_test",
     size = "small",
-    srcs = ["payload_provider_test.go"],
+    srcs = [
+        "payload_provider_coverage_test.go",
+        "payload_provider_test.go",
+    ],
     embed = [":hoveltest"],
     deps = [
         "//sdk/go/hovel",
     ],
+)
+
+go_library(
+    name = "hoveltest_branch_instrumented",
+    srcs = go_branch_sources(
+        name = "branch",
+        srcs = ["payload_provider.go"],
+    ),
+    importpath = "github.com/vibepwners/hovel/sdk/go/hoveltest",
+    deps = [
+        "//sdk/go/hovel:hovel_branch_instrumented",
+        "//tools/coverage/branchruntime",
+    ],
+)
+
+go_test(
+    name = "hoveltest_branch_test",
+    size = "small",
+    srcs = [
+        "payload_provider_coverage_test.go",
+        "payload_provider_test.go",
+    ],
+    embed = [":hoveltest_branch_instrumented"],
+    deps = ["//sdk/go/hovel:hovel_branch_instrumented"],
 )

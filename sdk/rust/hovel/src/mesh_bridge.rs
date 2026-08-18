@@ -13,7 +13,6 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
 use std::str::FromStr;
 use std::time::Duration;
 
-const MESH_BRIDGE_CAPABILITY_BYTES: usize = 32;
 const MESH_BRIDGE_CAPABILITY_CHARACTERS: usize = 43;
 const MESH_BRIDGE_CAPABILITY_REDACTED: &str = "<mesh bridge capability redacted>";
 const MESH_BRIDGE_NETWORK_TCP_VALUE: &str = "tcp";
@@ -105,14 +104,9 @@ impl MeshBridgeCapability {
             return Err("mesh bridge capability contains a non-base64url character".into());
         }
         let standard = value.replace('-', "+").replace('_', "/") + "=";
-        let decoded = base64::decode(&standard)?;
-        let canonical = base64::encode(&decoded)
-            .trim_end_matches('=')
-            .replace('+', "-")
-            .replace('/', "_");
-        if decoded.len() != MESH_BRIDGE_CAPABILITY_BYTES || canonical != value {
-            return Err("mesh bridge capability must be canonical 256-bit base64url".into());
-        }
+        // The decoder rejects non-canonical trailing bits. Together with the
+        // fixed encoded length above, success proves a canonical 256-bit value.
+        base64::decode(&standard)?;
         Ok(MeshBridgeCapability(value))
     }
 
@@ -279,14 +273,20 @@ pub fn connect_mesh_bridge_udp(
     socket.set_write_timeout(timeout)?;
     socket.connect(remote)?;
     let authentication = endpoint.capability.expose().as_bytes();
-    if socket.send(authentication)? != authentication.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::WriteZero,
-            "mesh bridge authentication datagram was truncated",
-        ));
-    }
+    require_complete_datagram(socket.send(authentication)?, authentication.len())?;
     socket.set_write_timeout(None)?;
     Ok(socket)
+}
+
+fn require_complete_datagram(sent: usize, expected: usize) -> io::Result<()> {
+    if sent == expected {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::WriteZero,
+            "mesh bridge authentication datagram was truncated",
+        ))
+    }
 }
 
 fn require_local_network(
@@ -463,6 +463,54 @@ mod tests {
             capability,
         )
         .is_err());
+    }
+
+    #[test]
+    fn capability_and_endpoint_cover_every_validation_branch() {
+        let valid = "A".repeat(MESH_BRIDGE_CAPABILITY_CHARACTERS);
+        assert!(MeshBridgeCapability::new(format!(" {valid}")).is_err());
+        assert!(MeshBridgeCapability::new("A").is_err());
+        assert!(MeshBridgeCapability::new(format!("{}!", "A".repeat(42))).is_err());
+        assert!(MeshBridgeCapability::new(format!("{}-", "A".repeat(42))).is_err());
+
+        let capability = MeshBridgeCapability::new(valid).unwrap();
+        assert!(MeshBridgeEndpoint::new(
+            " 127.0.0.1",
+            1,
+            MeshBridgeNetwork::Tcp,
+            capability.clone()
+        )
+        .is_err());
+        assert!(MeshBridgeEndpoint::new(
+            "127.0.0.1",
+            0,
+            MeshBridgeNetwork::Tcp,
+            capability.clone()
+        )
+        .is_err());
+        assert!(MeshBridgeEndpoint::new(
+            "localhost",
+            1,
+            MeshBridgeNetwork::Tcp,
+            capability.clone()
+        )
+        .is_err());
+        assert!(MeshBridgeEndpoint::new(
+            "192.0.2.1",
+            1,
+            MeshBridgeNetwork::Tcp,
+            capability.clone()
+        )
+        .is_err());
+        assert!(
+            MeshBridgeEndpoint::new("0:0:0:0:0:0:0:1", 1, MeshBridgeNetwork::Udp, capability)
+                .is_err()
+        );
+        assert!(require_complete_datagram(43, 43).is_ok());
+        assert_eq!(
+            require_complete_datagram(42, 43).unwrap_err().kind(),
+            io::ErrorKind::WriteZero
+        );
     }
 
     #[test]

@@ -381,3 +381,83 @@ fn session_close(emitter: &mut Emitter, params: &Value) -> Result<Value, String>
         .map_err(|e| e.to_string())?;
     Ok(Value::object(vec![("status", Value::from("ok"))]))
 }
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use crate::{Context, Info, ModuleType, Outcome, Schema};
+
+    struct MetadataModule;
+    impl Module for MetadataModule {
+        fn info(&self) -> Info {
+            Info {
+                name: "module".into(),
+                version: "v1".into(),
+                module_type: ModuleType::Survey,
+                summary: String::new(),
+                description: String::new(),
+                tags: Vec::new(),
+                discovery_context: vec![("summary".into(), Value::from("context"))],
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema {
+                planning_context: vec![("summary".into(), Value::from("plan"))],
+                ..Schema::default()
+            }
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    struct MissingNameModule;
+    impl Module for MissingNameModule {
+        fn info(&self) -> Info {
+            Info {
+                name: String::new(),
+                ..MetadataModule.info()
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema::default()
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    struct VersionlessModule;
+    impl Module for VersionlessModule {
+        fn info(&self) -> Info {
+            Info {
+                version: String::new(),
+                discovery_context: Vec::new(),
+                ..MetadataModule.info()
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema::default()
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn metadata_and_listener_validation_residual_branches() {
+        assert!(handshake(&MissingNameModule).is_err());
+        assert!(handshake(&MetadataModule).is_ok());
+        assert!(schema(&MetadataModule).get("planningContext").is_some());
+        assert_eq!(module_id(&VersionlessModule), "module");
+        assert!(mesh_listener_lifecycle_value("id", MeshListener::default()).is_err());
+        assert!(mesh_listener_lifecycle_value(
+            "id",
+            MeshListener {
+                id: "other".into(),
+                ..MeshListener::default()
+            }
+        )
+        .is_err());
+    }
+}

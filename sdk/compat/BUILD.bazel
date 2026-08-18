@@ -1,13 +1,80 @@
-load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 py_test(
     name = "public_api_baseline_test",
     srcs = ["public_api_baseline_test.py"],
     data = [
         "public_api_baseline.json",
+        "public_api_contract_digests.json",
         "//sdk/go/hovel:sources",
         "//sdk/python:sources",
         "//sdk/rust/hovel:sources",
     ],
     python_version = "PY3",
+)
+
+# These deliberately small consumers are the executable shape of the module
+# contract. Keep their SDK calls stable: changing them to follow an SDK refactor
+# would hide the exact breakage this package is intended to catch.
+py_binary(
+    name = "python_contract_probe",
+    srcs = ["probes/python_contract_probe.py"],
+    deps = ["//sdk/python:hovel_sdk"],
+)
+
+go_binary(
+    name = "go_contract_probe",
+    srcs = ["probes/go_contract_probe.go"],
+    deps = ["//sdk/go/hovel"],
+)
+
+rust_binary(
+    name = "rust_contract_probe",
+    srcs = ["probes/rust_contract_probe.rs"],
+    crate_name = "rust_contract_probe",
+    edition = "2021",
+    deps = ["//sdk/rust/hovel"],
+)
+
+py_test(
+    name = "protocol_conformance_test",
+    size = "small",
+    srcs = ["protocol_conformance_test.py"],
+    args = [
+        "$(rootpath :python_contract_probe)",
+        "$(rootpath :go_contract_probe)",
+        "$(rootpath :rust_contract_probe)",
+        "$(rootpath :legacy_v0_3_2_probe)",
+    ],
+    data = [
+        "protocol_contract_v1.json",
+        ":go_contract_probe",
+        ":legacy_v0_3_2_probe",
+        ":python_contract_probe",
+        ":rust_contract_probe",
+    ],
+    python_version = "PY3",
+)
+
+py_test(
+    name = "legacy_runtime_compatibility_test",
+    size = "medium",
+    srcs = ["legacy_runtime_compatibility_test.py"],
+    args = [
+        "$(rootpath @hovel_core//cmd/hovel:hovel)",
+        "$(rootpath :legacy_v0_3_2_probe)",
+    ],
+    data = [
+        ":legacy_v0_3_2_probe",
+        "@hovel_core//cmd/hovel",
+    ],
+    python_version = "PY3",
+)
+
+py_binary(
+    name = "legacy_v0_3_2_probe",
+    srcs = ["fixtures/v0_3_2/legacy_module.py"],
+    main = "fixtures/v0_3_2/legacy_module.py",
 )

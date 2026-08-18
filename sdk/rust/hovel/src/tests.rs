@@ -2,16 +2,18 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::io::Cursor;
+use std::io::{self, Cursor, Write};
+use std::process::{Command, Stdio};
 use std::rc::Rc;
 
 use crate::credential_provider::{
     CREDENTIAL_RPC_ENCODE_METHOD, CREDENTIAL_RPC_FILES_METHOD, CREDENTIAL_RPC_RUNTIME_METHOD,
     CREDENTIAL_RPC_STAMP_METHOD,
 };
+use crate::framing::{read_message, write_message};
 use crate::json::{self, Value};
 use crate::{
-    base64, serve_with, Context, CredentialArtifactContent, CredentialArtifactInput,
+    base64, serve_with, Artifact, Context, CredentialArtifactContent, CredentialArtifactInput,
     CredentialArtifactOutput, CredentialBytes, CredentialConsumerType,
     CredentialDeliveryCapability, CredentialDeliveryDescriptor, CredentialDeliveryReceipt,
     CredentialEncodingRequest, CredentialEncodingResult, CredentialEndpointRole,
@@ -22,7 +24,7 @@ use crate::{
     CredentialStampExecutionRequest, CredentialStampExecutionResult, CredentialStampMaterial,
     CredentialStampOutput, CredentialStampPrecondition, CredentialStampRemainderPolicy,
     CredentialStampRequest, CredentialStampTarget, CredentialStampTargetKind,
-    CredentialStampTargetResolution, CredentialStampedMaterialDigest, Info,
+    CredentialStampTargetResolution, CredentialStampedMaterialDigest, Finding, Info,
     InstalledPayloadDescriptor, LineShellSession, MeshBeacon, MeshBeaconRequest,
     MeshDescribeRequest, MeshDescriptor, MeshLink, MeshListener, MeshListenerListRequest,
     MeshListenerSpec, MeshListenerStartRequest, MeshListenerStopRequest, MeshNode, MeshRoute,
@@ -42,6 +44,194 @@ fn json_round_trips() {
     let value = json::parse(text).expect("parse");
     assert_eq!(value.get("a").and_then(Value::as_f64), Some(1.0));
     assert_eq!(value.to_string(), text);
+}
+
+#[test]
+fn residual_base64_framing_and_json_branches() {
+    assert!(base64::decode("Zm8=AAAA").is_err());
+
+    for input in [
+        b"Header: value".as_slice(),
+        b"Header\r\n\r\n".as_slice(),
+        b"Other: value\r\n\r\n".as_slice(),
+        b"content-length: bad\r\n\r\n".as_slice(),
+        b"content-length: 1\r\n\r\n\xff".as_slice(),
+        b"content-length: 1\r\n\r\n{".as_slice(),
+    ] {
+        assert!(read_message(&mut Cursor::new(input)).is_err());
+    }
+
+    struct FailingWriter(usize);
+    impl Write for FailingWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.0 == 0 {
+                return Err(io::Error::other("injected"));
+            }
+            self.0 -= 1;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("injected"))
+        }
+    }
+    assert!(write_message(&mut FailingWriter(0), &Value::Null).is_err());
+    assert!(write_message(&mut FailingWriter(1), &Value::Null).is_err());
+    assert!(write_message(&mut FailingWriter(2), &Value::Null).is_err());
+
+    for invalid in [
+        "true false",
+        "tru",
+        "fals",
+        "nul",
+        "{x:1}",
+        r#"{"x" 1}"#,
+        r#"{"x":}"#,
+        "[",
+        r#"{"x":1"#,
+        "1e+",
+        "\"unterminated",
+    ] {
+        assert!(json::parse(invalid).is_err(), "accepted {invalid:?}");
+    }
+    for valid in ["1e+2", "1E-2", "-3.5"] {
+        assert!(json::parse(valid).is_ok(), "rejected {valid:?}");
+    }
+    assert_eq!(Value::Num(f64::INFINITY).to_string(), "inf");
+    assert_eq!(Value::Num(1e15).to_string(), "1000000000000000");
+    assert_eq!(
+        Value::from("\u{1}\n\r\t\\\"").to_string(),
+        r#""\u0001\n\r\t\\\"""#
+    );
+}
+
+#[test]
+fn residual_result_serialization_branches() {
+    assert_eq!(Finding::new("title", "high", "detail").severity, "high");
+    let empty_record = PayloadProviderRecord::new("", Vec::new());
+    let populated_record = PayloadProviderRecord::new("schema", vec![("key".into(), Value::Null)])
+        .with_provider_id("provider")
+        .with_schema_version("v1");
+    let payload = InstalledPayloadDescriptor::new("provider", "payload", "target")
+        .with_supports_multiple_sessions(true)
+        .with_reconnect(empty_record.clone())
+        .with_cleanup(empty_record);
+    let minimal_payload = InstalledPayloadDescriptor::new("provider", "minimal", "target");
+    let populated_payload = InstalledPayloadDescriptor::new("provider", "populated", "target")
+        .with_reconnect(populated_record.clone())
+        .with_cleanup(populated_record);
+    let session = crate::SessionRef {
+        id: "session".into(),
+        run_id: "run".into(),
+        module_id: "module".into(),
+        target: "target".into(),
+        name: "name".into(),
+        kind: "shell".into(),
+        state: "active".into(),
+        transport: String::new(),
+        capabilities: Vec::new(),
+    };
+    let mut outcome = Outcome::ok(Vec::new())
+        .with_finding(Finding::new("title", "", "detail"))
+        .with_artifact(Artifact::inline("inline", "type", "data"))
+        .with_artifact(Artifact {
+            name: "path".into(),
+            kind: "type".into(),
+            data: String::new(),
+            path: "/tmp/path".into(),
+        })
+        .with_installed_payload(payload)
+        .with_installed_payload(minimal_payload)
+        .with_installed_payload(populated_payload);
+    outcome.sessions.push(session.clone());
+    let encoded = outcome.to_value(vec![session]);
+    assert!(encoded.get("installedPayloads").is_some());
+    assert!(Outcome::failed("failed")
+        .to_value(Vec::new())
+        .get("agentHints")
+        .is_none());
+}
+
+#[test]
+fn serve_process_child() {
+    if std::env::var_os("HOVEL_RUST_SERVE_CHILD").is_none() {
+        return;
+    }
+    crate::serve(FakeModule {
+        with_session: false,
+    });
+}
+
+#[test]
+fn serve_entry_point_branches() {
+    let executable = std::env::current_exe().unwrap();
+    let success = Command::new(&executable)
+        .args(["--exact", "tests::serve_process_child"])
+        .env("HOVEL_RUST_SERVE_CHILD", "1")
+        .stdin(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(success.success());
+    let mut failure = Command::new(executable)
+        .args(["--exact", "tests::serve_process_child"])
+        .env("HOVEL_RUST_SERVE_CHILD", "1")
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    failure
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(b"bad header")
+        .unwrap();
+    assert_eq!(failure.wait().unwrap().code(), Some(2));
+}
+
+#[test]
+fn serve_skips_messages_without_methods() {
+    let mut input = frame(Value::object(vec![("jsonrpc", Value::from("2.0"))]));
+    input.extend(frame(request(1, "shutdown", Value::Object(Vec::new()))));
+    let messages = run_session(
+        input,
+        FakeModule {
+            with_session: false,
+        },
+    );
+    assert_eq!(responses(&messages).len(), 1);
+}
+
+#[test]
+fn line_shell_residual_control_flow() {
+    let mut shell = LineShellSession::new("", true, |_| "line\n".into());
+    shell.open().unwrap();
+    let _ = shell.read(0).unwrap();
+    shell.write(b"x\n").unwrap();
+    shell.write(&[0x08]).unwrap();
+    while !shell.read(0).unwrap().is_empty() {}
+    shell.close("done").unwrap();
+    assert!(shell.write(b"ignored").is_ok());
+    assert!(shell.open().is_ok());
+    assert!(shell.read(1).unwrap().is_empty());
+
+    let mut quiet = LineShellSession::new("$ ", false, |_| String::new());
+    quiet.open().unwrap();
+    let _ = quiet.read(0).unwrap();
+    quiet.write(b"x\x08\nplain").unwrap();
+}
+
+#[test]
+fn line_shell_covers_empty_output_and_buffered_echo_backspace() {
+    let mut shell = LineShellSession::new("$ ", true, |_| String::new());
+    shell.open().unwrap();
+    shell.write(b"ab\x08\n").unwrap();
+    let mut output = Vec::new();
+    loop {
+        let chunk = shell.read(0).unwrap();
+        if chunk.is_empty() {
+            break;
+        }
+        output.extend(chunk);
+    }
+    assert_eq!(output, b"$ ab\x08 \x08\n$ ");
 }
 
 #[test]

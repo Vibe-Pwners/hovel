@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "branchruntime",
+    srcs = ["runtime.go"],
+    importpath = "github.com/vibepwners/hovel/tools/coverage/branchruntime",
+    visibility = [
+        "//sdk/go:__subpackages__",
+        "//tools/coverage:__subpackages__",
+    ],
+)
+
+go_test(
+    name = "branchruntime_test",
+    srcs = ["runtime_test.go"],
+    embed = [":branchruntime"],
+)
