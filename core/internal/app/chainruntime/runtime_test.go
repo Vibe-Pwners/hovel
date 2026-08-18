@@ -132,6 +132,10 @@ func TestRuntimeAppliesCapabilityStateTransitions(t *testing.T) {
 		StepContracts: modulecatalog.StepContractSet{Steps: []modulecatalog.StepContract{{
 			ID:   "install",
 			Kind: "payload.install",
+			Produces: []modulecatalog.CapabilityRequirement{{
+				Type:   modulecatalog.CapabilityPayloadInstance,
+				States: []string{"planned"},
+			}},
 		}}},
 	})
 	runner := &fakeStepRunner{
@@ -167,6 +171,30 @@ func TestRuntimeAppliesCapabilityStateTransitions(t *testing.T) {
 	}
 	if len(result.Capabilities) != 1 || result.Capabilities[0].State != "installed" {
 		t.Fatalf("capabilities = %#v, want installed payload", result.Capabilities)
+	}
+}
+
+func TestRuntimeRejectsUndeclaredCapabilitiesAndInvalidTransitions(t *testing.T) {
+	catalog := modulecatalog.New(modulecatalog.Module{
+		ID: "provider@v1", Enabled: true,
+		StepContracts: modulecatalog.StepContractSet{Steps: []modulecatalog.StepContract{{
+			ID: "generate", Kind: "payload.generate",
+			Produces: []modulecatalog.CapabilityRequirement{{Type: modulecatalog.CapabilityPayloadArtifact, SchemaVersion: "v1"}},
+		}}},
+	})
+	undeclared := &fakeStepRunner{execute: map[string]StepExecuteResult{
+		"provider@v1/generate": {Status: "succeeded", Capabilities: []modulecatalog.Capability{{ID: "wrong", Type: modulecatalog.CapabilitySessionRef, SchemaVersion: "v1"}}},
+	}}
+	if _, err := New(catalog, undeclared).Execute(context.Background(), Request{RunID: "run", Steps: []StepRef{{ModuleID: "provider", StepID: "generate"}}}); err == nil {
+		t.Fatal("runtime accepted undeclared capability")
+	}
+
+	transition := &fakeStepRunner{
+		prepare: map[string]StepPrepareResult{"provider@v1/generate": {PlannedOutputs: []modulecatalog.Capability{{ID: "artifact", Type: modulecatalog.CapabilityPayloadArtifact, SchemaVersion: "v1"}}}},
+		execute: map[string]StepExecuteResult{"provider@v1/generate": {Status: "succeeded", StateTransitions: []CapabilityTransition{{CapabilityID: "missing", To: "ready"}}}},
+	}
+	if _, err := New(catalog, transition).Execute(context.Background(), Request{RunID: "run", Steps: []StepRef{{ModuleID: "provider", StepID: "generate"}}}); err == nil {
+		t.Fatal("runtime accepted transition for unknown capability")
 	}
 }
 

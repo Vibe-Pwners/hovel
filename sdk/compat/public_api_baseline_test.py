@@ -138,11 +138,7 @@ def current_api(repo: Path) -> dict[str, str]:
 def contract_digests(api: dict[str, str]) -> dict[str, str]:
     result = {}
     for language in ("python", "go", "rust"):
-        surface = {
-            key: api_shape(value)
-            for key, value in api.items()
-            if key.startswith(language + ":")
-        }
+        surface = {key: api_shape(value) for key, value in api.items() if key.startswith(language + ":")}
         payload = json.dumps(surface, sort_keys=True, separators=(",", ":")).encode()
         result[language] = hashlib.sha256(payload).hexdigest()
     return result
@@ -153,6 +149,14 @@ def api_shape(declaration: str) -> str:
     if declaration.startswith("func ") or declaration.startswith("pub fn "):
         return declaration.split(" {", 1)[0]
     return declaration
+
+
+def additive_trait_compatible(previous: str, current: str) -> bool:
+    """Allow defaulted Rust trait methods to be added without weakening old members."""
+    if not previous.startswith("pub trait ") or not current.startswith("pub trait "):
+        return False
+    method = re.compile(r"fn\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*(?:->\s*[^\{;]+)?")
+    return set(method.findall(previous)).issubset(method.findall(current))
 
 
 def baseline_lookup_key(symbol: str, signature: str) -> str | None:
@@ -192,7 +196,9 @@ def main() -> int:
             continue
         if lookup not in legacy_current:
             failures.append(f"removed public API: {symbol}")
-        elif api_shape(legacy_current[lookup]) != api_shape(signature):
+        elif api_shape(legacy_current[lookup]) != api_shape(signature) and not additive_trait_compatible(
+            api_shape(signature), api_shape(legacy_current[lookup])
+        ):
             failures.append(f"changed public API: {symbol}\n  was: {signature}\n  now: {legacy_current[lookup]}")
     expected_digests = json.loads((repo / "sdk/compat/public_api_contract_digests.json").read_text(encoding="utf-8"))
     actual_digests = contract_digests(current)

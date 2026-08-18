@@ -71,6 +71,33 @@ func (coverageTaskErrorModule) RunMeshTask(*MeshContext, MeshTaskRequest) (MeshT
 	return MeshTaskResult{}, errors.New("task failed")
 }
 
+type coveragePayloadV1Module struct{ fakeModule }
+
+func (coveragePayloadV1Module) DescribePayloads() (PayloadProviderDescriptor, error) {
+	return PayloadProviderDescriptor{SchemaVersion: PayloadSchemaV1, ProviderID: "provider", Version: "1"}, nil
+}
+func (coveragePayloadV1Module) ResolvePayloadV1(PayloadQuery) (PayloadVariant, error) {
+	return PayloadVariant{ID: "payload"}, nil
+}
+func (coveragePayloadV1Module) GeneratePayloadV1(GeneratePayloadRequest) (PayloadArtifactV1, error) {
+	return PayloadArtifactV1{Name: "payload"}, nil
+}
+func (coveragePayloadV1Module) ReadPayloadArtifact(ReadPayloadChunkRequest) (PayloadChunk, error) {
+	return PayloadChunk{EOF: true}, nil
+}
+func (coveragePayloadV1Module) PreparePayloadListener(PrepareListenerRequest) (ListenerRef, error) {
+	return ListenerRef{ID: "listener"}, nil
+}
+func (coveragePayloadV1Module) ConnectPayload(ConnectSessionRequest) (SessionRef, error) {
+	return SessionRef{ID: "session"}, nil
+}
+func (coveragePayloadV1Module) InspectPayload(ConnectSessionRequest) (InstalledPayloadDescriptor, error) {
+	return InstalledPayloadDescriptor{Provider: "provider"}, nil
+}
+func (coveragePayloadV1Module) CleanupInstalledPayload(CleanupPayloadRequest) (CleanupResult, error) {
+	return CleanupResult{Status: "removed"}, nil
+}
+
 func coverageServer(module Module) *server {
 	s := &server{module: module, writer: newFrameWriter(io.Discard)}
 	s.sessions = newSessionManager(func(sessionEvent) {})
@@ -85,6 +112,7 @@ func TestServerDispatchRejectsUnavailableSurfaces(t *testing.T) {
 		meshRPCListenerStartMethod, meshRPCListenerStopMethod, meshRPCTaskMethod, meshRPCOpenStreamMethod,
 		credentialRPCRuntimeMethod, credentialRPCDescribeMethod, credentialRPCFilesMethod, credentialRPCEncodeMethod, credentialRPCStampMethod,
 		"step.describe", "step.prepare", "step.execute", "step.cleanup", "unknown",
+		"payload.describe", "payload.resolve", "payload.generate", "payload.artifact.read", "payload.listener.prepare", "payload.connect", "payload.inspect", "payload.cleanup",
 	}
 	for _, method := range methods {
 		if _, err := s.dispatch(method, nil); err == nil {
@@ -105,6 +133,7 @@ func TestServerMalformedParamsAcrossProviderSurfaces(t *testing.T) {
 		{fakePayloadProvider{}, []string{"list_payloads", "resolve_payload", "prepare_listener", "generate_payload", "connect_session", "cleanup_payload", "read_payload_chunk"}},
 		{fakeStepModule{}, []string{"step.prepare", "step.execute", "step.cleanup"}},
 		{fakeMeshModule{}, []string{meshRPCDescribeMethod, meshRPCTopologyMethod, meshRPCBeaconsMethod, meshRPCListenersMethod, meshRPCListenerStartMethod, meshRPCListenerStopMethod, meshRPCTaskMethod, meshRPCOpenStreamMethod, credentialRPCRuntimeMethod, credentialRPCFilesMethod, credentialRPCEncodeMethod, credentialRPCStampMethod}},
+		{coveragePayloadV1Module{}, []string{"payload.resolve", "payload.generate", "payload.artifact.read", "payload.listener.prepare", "payload.connect", "payload.inspect", "payload.cleanup"}},
 	} {
 		s := coverageServer(tc.module)
 		for _, method := range tc.methods {
@@ -118,6 +147,18 @@ func TestServerMalformedParamsAcrossProviderSurfaces(t *testing.T) {
 		t.Fatalf("empty decode = %#v, %v", value, err)
 	}
 	_ = decoded
+}
+
+func TestServerDispatchesOptionalPayloadV1Surfaces(t *testing.T) {
+	s := coverageServer(coveragePayloadV1Module{})
+	for _, method := range []string{
+		"payload.describe", "payload.resolve", "payload.generate", "payload.artifact.read",
+		"payload.listener.prepare", "payload.connect", "payload.inspect", "payload.cleanup",
+	} {
+		if _, err := s.dispatch(method, json.RawMessage(`{}`)); err != nil {
+			t.Fatalf("%s: %v", method, err)
+		}
+	}
 }
 
 func TestServerPropagatesCredentialProviderFailures(t *testing.T) {

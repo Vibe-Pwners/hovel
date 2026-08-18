@@ -13,6 +13,7 @@ HOVEL_SRCS = [
     "mesh_bridge.go",
     "module.go",
     "payload.go",
+    "payload_v1.go",
     "pty_linux.go",
     "pty_session.go",
     "pty_unsupported.go",

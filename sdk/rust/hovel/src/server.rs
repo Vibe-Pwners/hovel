@@ -20,6 +20,11 @@ use crate::mesh::{
     MESH_RPC_OPEN_STREAM_METHOD, MESH_RPC_TASK_METHOD, MESH_RPC_TOPOLOGY_METHOD,
 };
 use crate::module::Module;
+use crate::payload::{
+    PAYLOAD_RPC_ARTIFACT_READ_METHOD, PAYLOAD_RPC_CLEANUP_METHOD, PAYLOAD_RPC_CONNECT_METHOD,
+    PAYLOAD_RPC_DESCRIBE_METHOD, PAYLOAD_RPC_GENERATE_METHOD, PAYLOAD_RPC_INSPECT_METHOD,
+    PAYLOAD_RPC_LISTENER_PREPARE_METHOD, PAYLOAD_RPC_RESOLVE_METHOD,
+};
 
 /// Runs `module` over stdin/stdout until the daemon sends "shutdown" or the
 /// stream closes. This is the entry point for every Rust module's `main`:
@@ -121,6 +126,14 @@ fn dispatch(
         CREDENTIAL_RPC_FILES_METHOD => credential_files(module, params),
         CREDENTIAL_RPC_ENCODE_METHOD => credential_encode(module, params),
         CREDENTIAL_RPC_STAMP_METHOD => credential_stamp(module, params),
+        PAYLOAD_RPC_DESCRIBE_METHOD => Ok(module.describe_payloads()?.to_value()),
+        PAYLOAD_RPC_RESOLVE_METHOD => Ok(module.resolve_payload_v1(params.clone())?.to_value()),
+        PAYLOAD_RPC_GENERATE_METHOD => Ok(module.generate_payload_v1(params.clone())?.to_value()),
+        PAYLOAD_RPC_ARTIFACT_READ_METHOD => module.read_payload_artifact(params.clone()),
+        PAYLOAD_RPC_LISTENER_PREPARE_METHOD => module.prepare_payload_listener(params.clone()),
+        PAYLOAD_RPC_CONNECT_METHOD => module.connect_payload(params.clone()),
+        PAYLOAD_RPC_INSPECT_METHOD => module.inspect_payload(params.clone()),
+        PAYLOAD_RPC_CLEANUP_METHOD => module.cleanup_installed_payload(params.clone()),
         "execute" => Ok(execute(module, emitter, params)),
         "session/write" => session_write(emitter, params),
         "session/read" => session_read(emitter, params),

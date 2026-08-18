@@ -49,6 +49,7 @@ from hovel_sdk.mesh import (
     MeshTopologyRequest,
 )
 from hovel_sdk.module import HovelModule
+from hovel_sdk.payload import PAYLOAD_RPC_PREFIX
 from hovel_sdk.session import SessionManager, SessionRef
 
 _MODULE_TYPES = {"survey", "exploit", "payload_provider"}
@@ -124,6 +125,8 @@ class JSONRPCServer:
             result = self._loop.run_until_complete(self._dispatch_mesh(method, params))
         elif method.startswith(_CREDENTIAL_RPC_PREFIX):
             result = self._loop.run_until_complete(self._dispatch_credential(method, params))
+        elif method.startswith(PAYLOAD_RPC_PREFIX):
+            result = self._dispatch_payload(method, params)
         elif method.startswith("step."):
             result = self._dispatch_step(method, params)
         elif method == "execute":
@@ -136,6 +139,27 @@ class JSONRPCServer:
         else:
             raise ValueError(f"unknown method {method!r}")
         return result
+
+    def _dispatch_payload(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if method == "payload.describe":
+            result = self._module.describe_payloads()
+        elif method == "payload.resolve":
+            result = self._module.resolve_payload_v1(params)
+        elif method == "payload.generate":
+            result = self._module.generate_payload_v1(params)
+        elif method == "payload.artifact.read":
+            result = self._module.read_payload_artifact(params)
+        elif method == "payload.listener.prepare":
+            result = self._module.prepare_payload_listener(params)
+        elif method == "payload.connect":
+            result = self._module.connect_payload(params)
+        elif method == "payload.inspect":
+            result = self._module.inspect_payload(params)
+        elif method == "payload.cleanup":
+            result = self._module.cleanup_installed_payload(params)
+        else:
+            raise ValueError(f"unknown method {method!r}")
+        return result.to_rpc() if hasattr(result, "to_rpc") else dict(result)
 
     def _dispatch_step(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method == "step.describe":

@@ -35,6 +35,14 @@ from hovel_sdk.mesh_bridge import (
     connect_mesh_bridge,
 )
 from hovel_sdk.module import HovelModule
+from hovel_sdk.payload import (
+    PayloadArtifactV1,
+    PayloadContent,
+    PayloadLoadContract,
+    PayloadProviderDescriptor,
+    PayloadTarget,
+    PayloadVariant,
+)
 from hovel_sdk.result import AgentHint, Artifact, Finding, InstalledPayload, PayloadProviderRecord, Result
 from hovel_sdk.server import (
     JSONRPCServer,
@@ -161,6 +169,14 @@ def test_module_default_contract_methods() -> None:
         lambda: module.prepare_step({}),
         lambda: module.execute_step({}),
         lambda: module.cleanup_step({}),
+        module.describe_payloads,
+        lambda: module.resolve_payload_v1({}),
+        lambda: module.generate_payload_v1({}),
+        lambda: module.read_payload_artifact({}),
+        lambda: module.prepare_payload_listener({}),
+        lambda: module.connect_payload({}),
+        lambda: module.inspect_payload({}),
+        lambda: module.cleanup_installed_payload({}),
         lambda: module.describe_mesh(None),  # type: ignore[arg-type]
         lambda: module.mesh_topology(None),  # type: ignore[arg-type]
         lambda: module.list_mesh_beacons(None),  # type: ignore[arg-type]
@@ -388,6 +404,98 @@ class _ServerModule(_MinimalModule):
 
     def run_mesh_task(self, _ctx: Context, _request: object) -> dict[str, object]:  # type: ignore[override]
         return dict(self.mesh_result)
+
+    def describe_payloads(self) -> PayloadProviderDescriptor:
+        return _payload_descriptor()
+
+    def resolve_payload_v1(self, _request: dict[str, object]) -> PayloadVariant:  # type: ignore[override]
+        return _payload_descriptor().payloads[0]
+
+    def generate_payload_v1(self, _request: dict[str, object]) -> PayloadArtifactV1:  # type: ignore[override]
+        return PayloadArtifactV1(
+            "agent",
+            "primary",
+            _payload_descriptor().payloads[0],
+            "application/octet-stream",
+            3,
+            "abc",
+            PayloadContent(inline_encoding="base64", inline_data="YWJj"),
+            {"test.dev/key": True},
+        )
+
+    def read_payload_artifact(self, request: dict[str, object]) -> dict[str, object]:  # type: ignore[override]
+        return request
+
+    def prepare_payload_listener(self, request: dict[str, object]) -> dict[str, object]:  # type: ignore[override]
+        return request
+
+    def connect_payload(self, request: dict[str, object]) -> dict[str, object]:  # type: ignore[override]
+        return request
+
+    def inspect_payload(self, request: dict[str, object]) -> dict[str, object]:  # type: ignore[override]
+        return request
+
+    def cleanup_installed_payload(self, request: dict[str, object]) -> dict[str, object]:  # type: ignore[override]
+        return request
+
+
+def _payload_descriptor() -> PayloadProviderDescriptor:
+    return PayloadProviderDescriptor(
+        "coverage",
+        "1.0.0",
+        ("describe", "generate"),
+        (
+            PayloadVariant(
+                "agent-linux",
+                "Agent",
+                "1.0.0",
+                "agent",
+                "elf",
+                PayloadTarget("linux", "amd64", abi="gnu", endianness="little", minimum_os="5.4"),
+                PayloadLoadContract("process", "main", "pie", ("libc",)),
+                ("mesh.task",),
+                {"test.dev/key": True},
+            ),
+        ),
+        {"test.dev/provider": True},
+    )
+
+
+def test_payload_v1_wire_shapes_and_dispatch() -> None:
+    descriptor = _payload_descriptor()
+    assert descriptor.to_rpc()["payloads"][0]["target"]["minimumOs"] == "5.4"
+    server = JSONRPCServer(_ServerModule(), io.BytesIO(), io.BytesIO())
+    for method in (
+        "payload.describe",
+        "payload.resolve",
+        "payload.generate",
+        "payload.artifact.read",
+        "payload.listener.prepare",
+        "payload.connect",
+        "payload.inspect",
+        "payload.cleanup",
+    ):
+        assert server._dispatch(method, {"value": True})  # noqa: SLF001
+    with pytest.raises(ValueError, match="unknown method"):
+        server._dispatch("payload.unknown", {})  # noqa: SLF001
+    server._loop.close()  # noqa: SLF001
+
+    assert PayloadTarget("linux", "amd64").to_rpc() == {"os": "linux", "arch": "amd64"}
+    assert PayloadLoadContract("process").to_rpc() == {"executionModel": "process"}
+    assert PayloadProviderDescriptor("p", "1", ("describe",)).to_rpc()["providerId"] == "p"
+    minimal_variant = PayloadVariant(
+        "id", "name", "1", "agent", "elf", PayloadTarget("linux", "amd64"), PayloadLoadContract("process")
+    )
+    assert "capabilities" not in minimal_variant.to_rpc()
+    assert "extensions" not in minimal_variant.to_rpc()
+    minimal_artifact = PayloadArtifactV1(
+        "name", "primary", minimal_variant, "application/octet-stream", 1, "abc", PayloadContent(artifact_id="a")
+    )
+    assert "extensions" not in minimal_artifact.to_rpc()
+    assert PayloadContent(artifact_id="a").to_rpc() == {"artifact": {"id": "a"}}
+    assert PayloadContent(stream_handle="s").to_rpc() == {"stream": {"handle": "s"}}
+    with pytest.raises(ValueError, match="exactly one"):
+        PayloadContent().to_rpc()
 
 
 def test_server_loop_and_dispatch_errors() -> None:

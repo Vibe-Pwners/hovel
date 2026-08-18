@@ -100,6 +100,30 @@ class HovelModule(ABC):
     def cleanup_step(self, request: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement step.cleanup")
 
+    def describe_payloads(self) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} is not a payload provider")
+
+    def resolve_payload_v1(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.resolve")
+
+    def generate_payload_v1(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.generate")
+
+    def read_payload_artifact(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.artifact.read")
+
+    def prepare_payload_listener(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.listener.prepare")
+
+    def connect_payload(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.connect")
+
+    def inspect_payload(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.inspect")
+
+    def cleanup_installed_payload(self, _request: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{self.name or self.__class__.__name__} does not implement payload.cleanup")
+
     def describe_mesh(self, _request: MeshDescribeRequest) -> MeshDescriptor | Awaitable[MeshDescriptor]:
         raise NotImplementedError(f"{self.name or self.__class__.__name__} is not a mesh provider")
 

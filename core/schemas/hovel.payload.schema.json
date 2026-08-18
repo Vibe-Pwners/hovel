@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hovel.dev/schemas/hovel.payload.schema.json",
+  "title": "Hovel Payload Provider v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "providerId", "version", "operations"],
+  "properties": {
+    "schemaVersion": {"const": "hovel.payload/v1"},
+    "providerId": {"$ref": "#/$defs/id"},
+    "version": {"type": "string", "minLength": 1, "maxLength": 256},
+    "operations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["resolve", "generate", "read-artifact", "prepare-listener", "connect", "inspect", "cleanup", "commands"]}
+    },
+    "payloads": {"type": "array", "items": {"$ref": "#/$defs/variant"}},
+    "extensions": {"$ref": "#/$defs/extensions"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$"},
+    "extensions": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"}
+    },
+    "kind": {"enum": ["pic", "poc", "elf", "pe", "so", "dll", "dylib", "raw"]},
+    "format": {"enum": ["pic", "poc", "flat-pic", "raw-bin", "elf", "elf-exec", "so", "pe", "pe-exe", "pe-dll", "dll", "dylib", "macho-dylib"]},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch"],
+      "properties": {
+        "os": {"$ref": "#/$defs/id"},
+        "arch": {"$ref": "#/$defs/id"},
+        "abi": {"$ref": "#/$defs/id"},
+        "endianness": {"enum": ["little", "big"]},
+        "minimumOS": {"type": "string", "maxLength": 256}
+      }
+    },
+    "load": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executionModel"],
+      "properties": {
+        "executionModel": {"enum": ["process", "library", "position-independent-code", "provider-defined"]},
+        "entryContract": {"type": "string", "maxLength": 256},
+        "relocation": {"enum": ["none", "static", "dynamic", "position-independent", "provider-defined"]},
+        "dependencies": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 256}}
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "kind", "format", "target", "load"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "version": {"type": "string", "minLength": 1, "maxLength": 256},
+        "kind": {"$ref": "#/$defs/kind"},
+        "format": {"$ref": "#/$defs/format"},
+        "target": {"$ref": "#/$defs/target"},
+        "load": {"$ref": "#/$defs/load"},
+        "capabilities": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "inlineContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encoding", "data"],
+      "properties": {"encoding": {"enum": ["base64"]}, "data": {"type": "string"}}
+    },
+    "artifactContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId"],
+      "properties": {"artifactId": {"$ref": "#/$defs/id"}}
+    },
+    "streamContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle"],
+      "properties": {"handle": {"$ref": "#/$defs/id"}}
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {"$ref": "#/$defs/inlineContent"},
+        "artifact": {"$ref": "#/$defs/artifactContent"},
+        "stream": {"$ref": "#/$defs/streamContent"}
+      },
+      "oneOf": [
+        {"type": "object", "required": ["inline"], "properties": {"inline": {"$ref": "#/$defs/inlineContent"}}},
+        {"type": "object", "required": ["artifact"], "properties": {"artifact": {"$ref": "#/$defs/artifactContent"}}},
+        {"type": "object", "required": ["stream"], "properties": {"stream": {"$ref": "#/$defs/streamContent"}}}
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "name", "role", "variant", "mediaType", "size", "sha256", "content"],
+      "properties": {
+        "schemaVersion": {"const": "hovel.payload/v1"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "role": {"type": "string", "minLength": 1, "maxLength": 256},
+        "variant": {"$ref": "#/$defs/variant"},
+        "mediaType": {"type": "string", "minLength": 1, "maxLength": 256},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "content": {"$ref": "#/$defs/content"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    }
+  }
+}

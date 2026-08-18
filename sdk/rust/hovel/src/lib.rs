@@ -46,6 +46,7 @@ mod framing;
 mod mesh;
 mod mesh_bridge;
 mod module;
+mod payload;
 mod result;
 mod server;
 mod session;
@@ -92,6 +93,10 @@ pub use mesh_bridge::{
     MeshBridgeConnection, MeshBridgeEndpoint, MeshBridgeNetwork, ParseMeshBridgeNetworkError,
 };
 pub use module::{Info, Module, ModuleType, Requirement, Schema};
+pub use payload::{
+    PayloadArtifactV1, PayloadContent, PayloadLoadContract, PayloadProviderDescriptor,
+    PayloadTarget, PayloadVariant, PAYLOAD_SCHEMA_V1,
+};
 pub use result::{Artifact, Finding, InstalledPayloadDescriptor, Outcome, PayloadProviderRecord};
 pub use server::{serve, serve_with};
 pub use session::{
