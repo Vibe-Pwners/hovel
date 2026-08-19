@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -83,7 +84,6 @@ func (s WorkspaceStore) InitWorkspace(ctx context.Context, ws workspace.Workspac
 func ensureWorkspaceLayout(path string) error {
 	for _, rel := range []string{
 		"",
-		"artifacts",
 		"logs",
 		"modules",
 		"throws",
@@ -93,7 +93,7 @@ func ensureWorkspaceLayout(path string) error {
 			return err
 		}
 	}
-	return nil
+	return os.MkdirAll(filepath.Join(path, "artifacts"), 0o700)
 }
 
 type workspaceFile struct {
@@ -136,14 +136,6 @@ func writeWorkspace(path string, ws workspace.Workspace) error {
 	}
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0o644)
-}
-
-func safeArtifactName(name string) string {
-	name = filepath.Base(strings.TrimSpace(name))
-	if name == "." || name == string(filepath.Separator) || name == "" {
-		return "artifact.bin"
-	}
-	return name
 }
 
 func (s WorkspaceStore) RecordThrowPlan(ctx context.Context, plan commands.ThrowPlanRecord) error {
@@ -197,12 +189,9 @@ func (s WorkspaceStore) MaterializeArtifact(ctx context.Context, materialization
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
 	artifactID := artifactRecordID(materialization, sha)
-	relPath := artifactStoragePath(materialization, artifactID)
+	relPath := artifactStoragePath(sha)
 	absPath := filepath.Join(workspacePath, relPath)
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		return commands.ArtifactRecord{}, err
-	}
-	if err := os.WriteFile(absPath, data, 0o600); err != nil {
+	if err := storeArtifactBytes(absPath, data); err != nil {
 		return commands.ArtifactRecord{}, err
 	}
 	createdAt := materialization.CreatedAt
@@ -264,13 +253,24 @@ func (s WorkspaceStore) registerFileArtifact(ctx context.Context, workspacePath 
 	}
 	sha := hex.EncodeToString(hash.Sum(nil))
 	artifactID := artifactRecordID(materialization, sha)
-	relPath := artifactStoragePath(materialization, artifactID)
+	relPath := artifactStoragePath(sha)
 	absPath := filepath.Join(workspacePath, relPath)
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o700); err != nil {
 		logFilesystemError("remove unstaged artifact temp file", os.Remove(tempPath))
 		return commands.ArtifactRecord{}, err
 	}
-	if err := os.Rename(tempPath, absPath); err != nil {
+	if err := os.Chmod(tempPath, 0o600); err != nil {
+		logFilesystemError("remove artifact with invalid mode", os.Remove(tempPath))
+		return commands.ArtifactRecord{}, err
+	}
+	if _, err := os.Stat(absPath); err == nil {
+		if removeErr := os.Remove(tempPath); removeErr != nil {
+			return commands.ArtifactRecord{}, removeErr
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		logFilesystemError("remove artifact after stat failure", os.Remove(tempPath))
+		return commands.ArtifactRecord{}, err
+	} else if err := os.Rename(tempPath, absPath); err != nil {
 		logFilesystemError("remove unrenamed artifact temp file", os.Remove(tempPath))
 		return commands.ArtifactRecord{}, err
 	}
@@ -310,14 +310,42 @@ func artifactRecordID(materialization commands.ArtifactMaterialization, contentS
 	return "artifact-" + hex.EncodeToString(sum[:16])
 }
 
-func artifactStoragePath(materialization commands.ArtifactMaterialization, artifactID string) string {
-	return filepath.Join(
-		"artifacts",
-		materialization.ThrowID,
-		materialization.RunID,
-		artifactID,
-		safeArtifactName(materialization.Artifact.Name),
-	)
+func artifactStoragePath(contentSHA string) string {
+	return filepath.Join("artifacts", "sha256", contentSHA[:2], contentSHA)
+}
+
+func storeArtifactBytes(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if existing, err := os.ReadFile(path); err == nil {
+		if bytes.Equal(existing, data) {
+			return nil
+		}
+		return errors.New("artifact content-address collision")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".artifact-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	defer func() {
+		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			logFilesystemError("remove artifact temp file", removeErr)
+		}
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if _, err := temp.Write(data); err != nil {
+		return errors.Join(err, temp.Close())
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, path)
 }
 
 func (s WorkspaceStore) RecordEvent(ctx context.Context, workspacePath string, evt event.Event) error {

@@ -13,10 +13,12 @@ import (
 	"github.com/vibepwners/hovel/internal/adapters/daemonlocal"
 	"github.com/vibepwners/hovel/internal/adapters/daemonrpc"
 	mcpadapter "github.com/vibepwners/hovel/internal/adapters/mcp"
+	"github.com/vibepwners/hovel/internal/app/agentintegration"
 	"github.com/vibepwners/hovel/internal/app/modulecatalog"
 	"github.com/vibepwners/hovel/internal/app/services"
 	"github.com/vibepwners/hovel/internal/domain/daemon"
 	workspacepath "github.com/vibepwners/hovel/internal/domain/workspace"
+	agentinfra "github.com/vibepwners/hovel/internal/infra/agentintegration"
 	"github.com/vibepwners/hovel/internal/infra/daemonruntime"
 	"github.com/vibepwners/hovel/internal/moduleruntime/pythonrpc"
 	"github.com/vibepwners/hovel/internal/version"
@@ -42,6 +44,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return cli.Run(ctx, args[1:], stdout, stderr)
 	case "mcp":
 		return runMCP(ctx, args[1:], stdout, stderr)
+	case "agent":
+		return runAgent(ctx, args[1:], stdout, stderr)
 	case "daemon":
 		return runDaemon(ctx, args[1:], stdout, stderr)
 	case "version":
@@ -209,6 +213,8 @@ func newRootParser() *argparse.Parser {
 	}
 	parser.NewCommand("init", "Initialize a workspace.")
 	parser.NewCommand("status", "Inspect workspace and daemon status.")
+	agent := parser.NewCommand("agent", "Install agent-host integrations.")
+	agent.NewCommand("install", "Install Hovel skills and MCP configuration for an agent host.")
 	for _, role := range []struct {
 		name    string
 		summary string
@@ -544,6 +550,52 @@ func runMCP(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func newMCPParser() *argparse.Parser {
 	return argparse.NewParser("hovel mcp", "Launch the MCP agent interface.")
+}
+
+func runAgent(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "install" {
+		parser := newAgentParser()
+		if helpRequested(args) {
+			writeRootText(stdout, parser.Usage(nil))
+			return 0
+		}
+		message := "agent command is required"
+		if len(args) > 0 {
+			message = fmt.Sprintf("unknown agent command %q", args[0])
+		}
+		writeRootText(stderr, parser.Usage(message))
+		return 2
+	}
+	parser := argparse.NewParser("hovel agent install", "Install Hovel skills and MCP configuration for an agent host.")
+	host := parser.StringPositional(&argparse.Options{Required: true, Help: "Agent host: claude, codex, or opencode"})
+	scope := parser.Selector("", "scope", []string{"user", "project"}, &argparse.Options{Default: "user", Help: "Installation scope"})
+	integrationVersion := parser.String("", "version", &argparse.Options{Help: "Hovel integration version (defaults to this binary's version)"})
+	source := parser.String("", "source", &argparse.Options{Help: "Local package archive or extracted package directory"})
+	dryRun := parser.Flag("", "dry-run", &argparse.Options{Help: "Print intended actions without changing files or invoking host CLIs"})
+	force := parser.Flag("", "force", &argparse.Options{Help: "Replace conflicting Hovel-owned integration entries after preserving a backup"})
+	if ok, code := parseArgs(parser, args[1:], stdout, stderr); !ok {
+		return code
+	}
+	service := agentintegration.Service{Installer: agentinfra.Installer{}}
+	err := service.Install(ctx, agentintegration.InstallRequest{
+		Host:    agentintegration.Host(*host),
+		Scope:   agentintegration.Scope(*scope),
+		Version: *integrationVersion,
+		Source:  *source,
+		DryRun:  *dryRun,
+		Force:   *force,
+	}, stdout)
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func newAgentParser() *argparse.Parser {
+	parser := argparse.NewParser("hovel agent", "Install agent-host integrations.")
+	parser.NewCommand("install", "Install Hovel skills and MCP configuration for an agent host.")
+	return parser
 }
 
 func newTUIParser() *argparse.Parser {

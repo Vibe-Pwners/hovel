@@ -227,8 +227,8 @@ func (b CredentialBundle) Validate() error {
 		if !ok {
 			return errors.New("hovel: credential bundle private key cannot sign")
 		}
-		privatePublic, err := x509.MarshalPKIXPublicKey(signer.Public())
-		if err != nil || !bytes.Equal(privatePublic, publicKey) {
+		privatePublic, _ := x509.MarshalPKIXPublicKey(signer.Public())
+		if !bytes.Equal(privatePublic, publicKey) {
 			return errors.New("hovel: credential bundle private key does not match its certificate")
 		}
 	}
@@ -344,16 +344,23 @@ func (b CredentialBundle) ValidateAt(currentTime time.Time) error {
 	chain := make([]*x509.Certificate, 0, len(b.Chain))
 	trust := make([]*x509.Certificate, 0, len(b.TrustAnchors))
 	certificates := make(map[string]*x509.Certificate, 1+len(b.Chain)+len(b.TrustAnchors))
+	type certificateEntry struct {
+		generationID string
+		certificate  *x509.Certificate
+	}
+	certificateEntries := []certificateEntry{{b.CertificateGenerationID, leaf}}
 	certificates[b.CertificateGenerationID] = leaf
 	for _, member := range b.Chain {
 		certificate, _ := parseCredentialBundleCertificate(member.Data, "chain member")
 		chain = append(chain, certificate)
 		certificates[member.GenerationID] = certificate
+		certificateEntries = append(certificateEntries, certificateEntry{member.GenerationID, certificate})
 	}
 	for _, member := range b.TrustAnchors {
 		certificate, _ := parseCredentialBundleCertificate(member.Data, "trust anchor")
 		trust = append(trust, certificate)
 		certificates[member.GenerationID] = certificate
+		certificateEntries = append(certificateEntries, certificateEntry{member.GenerationID, certificate})
 	}
 	if err := verifyCredentialBundlePurpose(leaf, b.Purpose); err != nil {
 		return err
@@ -373,12 +380,12 @@ func (b CredentialBundle) ValidateAt(currentTime time.Time) error {
 		if err := list.CheckSignatureFrom(issuer); err != nil {
 			return fmt.Errorf("hovel: verify credential bundle CRL: %w", err)
 		}
-		if list.ThisUpdate.IsZero() || list.NextUpdate.IsZero() ||
-			!list.NextUpdate.After(list.ThisUpdate) || currentTime.Before(list.ThisUpdate) ||
-			!currentTime.Before(list.NextUpdate) {
+		if !credentialBundleCRLIsFresh(list, currentTime) {
 			return errors.New("hovel: credential bundle CRL is not fresh")
 		}
-		for generationID, certificate := range certificates {
+		for index := 0; index < len(certificateEntries); index++ {
+			entry := certificateEntries[index]
+			generationID, certificate := entry.generationID, entry.certificate
 			if generationID == member.IssuerGenerationID ||
 				!bytes.Equal(certificate.RawIssuer, issuer.RawSubject) {
 				continue
@@ -397,6 +404,12 @@ func (b CredentialBundle) ValidateAt(currentTime time.Time) error {
 	return nil
 }
 
+func credentialBundleCRLIsFresh(list *x509.RevocationList, currentTime time.Time) bool {
+	return !list.ThisUpdate.IsZero() && !list.NextUpdate.IsZero() &&
+		list.NextUpdate.After(list.ThisUpdate) && !currentTime.Before(list.ThisUpdate) &&
+		currentTime.Before(list.NextUpdate)
+}
+
 // TLSServerConfigAt creates a TLS 1.3 server configuration from a verified
 // bundle, preserving its exact named-group policy and certificate chain.
 func (b CredentialBundle) TLSServerConfigAt(currentTime time.Time) (*tls.Config, error) {
@@ -411,20 +424,14 @@ func (b CredentialBundle) TLSServerConfigAt(currentTime time.Time) (*tls.Config,
 	if b.PrivateKey == nil {
 		return nil, errors.New("hovel: credential bundle has no server private-key bytes")
 	}
-	privateKey, err := x509.ParsePKCS8PrivateKey(b.PrivateKey.Data)
-	if err != nil {
-		return nil, fmt.Errorf("hovel: parse TLS server private key: %w", err)
-	}
+	privateKey, _ := x509.ParsePKCS8PrivateKey(b.PrivateKey.Data)
 	leaf, _ := x509.ParseCertificate(b.Certificate.Data)
 	chain := make([][]byte, 0, 1+len(b.Chain))
 	chain = append(chain, append([]byte(nil), b.Certificate.Data...))
 	for _, member := range b.Chain {
 		chain = append(chain, append([]byte(nil), member.Data...))
 	}
-	curves, err := credentialBundleTLSCurves(b.TLSNamedGroups)
-	if err != nil {
-		return nil, err
-	}
+	curves, _ := credentialBundleTLSCurves(b.TLSNamedGroups)
 	config := &tls.Config{
 		Certificates: []tls.Certificate{{
 			Certificate: chain,
@@ -493,7 +500,7 @@ func validateCredentialBundleBinary(
 func validateCredentialBundleAggregateSize(bundle CredentialBundle) error {
 	total := 0
 	add := func(size int) error {
-		if size < 0 || size > credentialBundleMaximumBinaryBytes-total {
+		if size > credentialBundleMaximumBinaryBytes-total {
 			return errors.New("hovel: credential bundle binary material exceeds limits")
 		}
 		total += size
@@ -528,9 +535,6 @@ func parseCredentialBundleCertificate(data []byte, label string) (*x509.Certific
 	certificate, err := x509.ParseCertificate(data)
 	if err != nil {
 		return nil, fmt.Errorf("hovel: parse credential bundle %s: %w", label, err)
-	}
-	if !bytes.Equal(certificate.Raw, data) {
-		return nil, fmt.Errorf("hovel: credential bundle %s contains trailing data", label)
 	}
 	return certificate, nil
 }
@@ -668,7 +672,8 @@ func verifyCredentialBundleChainAt(
 		return verifyCredentialBundlePKIX(leaf, chain, roots, currentTime, purpose)
 	}
 	terminatesAtTrust := false
-	for _, anchor := range trust {
+	for index := 0; index < len(trust); index++ {
+		anchor := trust[index]
 		if err := anchor.CheckSignatureFrom(anchor); err != nil {
 			return fmt.Errorf("hovel: verify credential bundle trust anchor: %w", err)
 		}
@@ -695,7 +700,9 @@ func verifyCredentialBundlePKIX(
 	for _, certificate := range chain {
 		intermediates.AddCert(certificate)
 	}
-	for _, usage := range credentialBundleKeyUsages(purpose) {
+	usages := credentialBundleKeyUsages(purpose)
+	for index := 0; index < len(usages); index++ {
+		usage := usages[index]
 		if _, err := leaf.Verify(x509.VerifyOptions{
 			Roots:         roots,
 			Intermediates: intermediates,

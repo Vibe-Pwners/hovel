@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -21,6 +22,7 @@ def main() -> int:
     examples = Path("modules/examples/python")
     cache = Path(os.environ.get("TEST_TMPDIR", "/tmp")) / "python-check"
     env = os.environ | {
+        "HOVEL_REPO_ROOT": str(root),
         "RUFF_CACHE_DIR": str(cache / "ruff"),
         "MYPY_CACHE_DIR": str(cache / "mypy"),
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -96,8 +98,9 @@ def runfiles_root() -> Path:
         value = os.environ.get(name)
         if value:
             candidate = Path(value)
-            if (candidate / "sdk/python/pyproject.toml").exists():
-                return candidate.resolve()
+            for root in (candidate, candidate.parent):
+                if (root / "sdk/python/pyproject.toml").exists():
+                    return root.resolve()
     for name in ("RUNFILES_DIR", "TEST_SRCDIR"):
         value = os.environ.get(name)
         if not value:
@@ -116,7 +119,16 @@ def runfiles_root() -> Path:
 def resolve_tool(root: Path, path: Path) -> str:
     if path.is_absolute() and path.exists():
         return str(path)
-    for candidate in (root / path, Path.cwd() / path):
+    workspace = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", root))
+    executable_sibling = Path(sys.argv[0]).resolve().parent / path.name
+    for candidate in (
+        workspace / path,
+        workspace / "bazel-bin" / path,
+        root / "core/bazel-bin" / path,
+        executable_sibling,
+        root / path,
+        Path.cwd() / path,
+    ):
         if candidate.exists():
             return str(candidate)
     raise SystemExit(f"missing Bazel-provided Python tool: {path}")

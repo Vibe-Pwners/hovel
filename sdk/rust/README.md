@@ -296,11 +296,11 @@ fn credential_provider_framed_contract() {
 Focused checks:
 
 ```sh
-task sdk:ci
+aspect hovel-check sdk
 ```
 
-Use <code>task sdk:test</code> while iterating on behavior and
-<code>task sdk:build</code> for a compile-only check. The root Task wrappers
+Use <code>aspect hovel-check sdk</code> while iterating on behavior and
+<code>aspect hovel-check sdk</code> for a compile-only check. The root Task wrappers
 select the integration workspace and remain the supported entry point.
 
 Copy from these examples first:

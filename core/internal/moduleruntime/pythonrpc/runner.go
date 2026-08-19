@@ -1832,6 +1832,9 @@ func (r Runner) Run(ctx context.Context, request run.Request) (run.Result, error
 		"chainConfig":  request.ChainConfig,
 		"targetConfig": request.TargetConfig,
 	}
+	if request.ChainKV != nil {
+		executeParams["chainKV"] = request.ChainKV
+	}
 	if request.Agent != nil {
 		executeParams["agentContext"] = request.Agent
 	}
@@ -3164,19 +3167,64 @@ func resultFromRPC(request run.Request, values map[string]any, logs []rpcLog) (r
 	if err != nil {
 		return run.Result{}, err
 	}
+	chainKVBaseRevision, chainKVMutations, err := chainKVMutationsFromRPC(values["chainKVMutations"])
+	if err != nil {
+		return run.Result{}, err
+	}
 	args := run.ResultArgs{
-		Summary:           stringValue(values["summary"]),
-		Findings:          findings,
-		Artifacts:         artifacts,
-		Logs:              logsFromRPC(request, logs),
-		Sessions:          sessions,
-		InstalledPayloads: installedPayloads,
-		AgentHints:        agentHints,
+		Summary:             stringValue(values["summary"]),
+		Findings:            findings,
+		Artifacts:           artifacts,
+		Logs:                logsFromRPC(request, logs),
+		Sessions:            sessions,
+		InstalledPayloads:   installedPayloads,
+		AgentHints:          agentHints,
+		ChainKVBaseRevision: chainKVBaseRevision,
+		ChainKVMutations:    chainKVMutations,
 	}
 	if stringValue(values["status"]) == string(run.StateFailed) {
 		return run.Failed(request, args)
 	}
 	return run.Succeeded(request, args)
+}
+
+func chainKVMutationsFromRPC(value any) (uint64, []run.ChainKVMutation, error) {
+	if value == nil {
+		return 0, nil, nil
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return 0, nil, errors.New("chainKVMutations must be an object")
+	}
+	base, err := nonNegativeUint64(object["baseRevision"], "chainKVMutations baseRevision")
+	if err != nil {
+		return 0, nil, err
+	}
+	items, err := rpcArray(object["operations"], "chainKVMutations operations")
+	if err != nil {
+		return 0, nil, err
+	}
+	mutations := make([]run.ChainKVMutation, 0, len(items))
+	for index, item := range items {
+		entry, err := rpcObjectItem(item, "chainKVMutations operations", index)
+		if err != nil {
+			return 0, nil, err
+		}
+		mutations = append(mutations, run.ChainKVMutation{
+			Operation: stringValue(entry["operation"]),
+			Key:       stringValue(entry["key"]),
+			Value:     stringValue(entry["value"]),
+		})
+	}
+	return base, mutations, nil
+}
+
+func nonNegativeUint64(value any, label string) (uint64, error) {
+	number, ok := value.(float64)
+	if !ok || number < 0 || number != float64(uint64(number)) {
+		return 0, fmt.Errorf("%s must be a non-negative integer", label)
+	}
+	return uint64(number), nil
 }
 
 func logsFromRPC(request run.Request, logs []rpcLog) []run.LogEntry {
@@ -3226,6 +3274,10 @@ func moduleFromRPC(info, schema map[string]any) (modulecatalog.Module, error) {
 	if err != nil {
 		return modulecatalog.Module{}, err
 	}
+	chainKV, err := chainKVContractFromRPC(schema["chainKV"])
+	if err != nil {
+		return modulecatalog.Module{}, err
+	}
 	tags, err := strictStringSlice(info["tags"], "handshake tags")
 	if err != nil {
 		return modulecatalog.Module{}, err
@@ -3247,6 +3299,7 @@ func moduleFromRPC(info, schema map[string]any) (modulecatalog.Module, error) {
 		Enabled:      true,
 		ChainConfig:  chainConfig,
 		TargetConfig: targetConfig,
+		ChainKV:      chainKV,
 	}
 	discovery, err := contextFromRPC(info["discoveryContext"], "discoveryContext")
 	if err != nil {
@@ -3259,6 +3312,52 @@ func moduleFromRPC(info, schema map[string]any) (modulecatalog.Module, error) {
 	module.Discovery = discovery
 	module.Planning = planning
 	return module, nil
+}
+
+func chainKVContractFromRPC(value any) (modulecatalog.ChainKVContract, error) {
+	if value == nil {
+		return modulecatalog.ChainKVContract{}, nil
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return modulecatalog.ChainKVContract{}, errors.New("chainKV contract must be an object")
+	}
+	requires, err := chainKVBindingsFromRPC(object["requires"], "chainKV requires")
+	if err != nil {
+		return modulecatalog.ChainKVContract{}, err
+	}
+	produces, err := chainKVBindingsFromRPC(object["produces"], "chainKV produces")
+	if err != nil {
+		return modulecatalog.ChainKVContract{}, err
+	}
+	return modulecatalog.ChainKVContract{Requires: requires, Produces: produces}, nil
+}
+
+func chainKVBindingsFromRPC(value any, label string) ([]modulecatalog.ChainKVBinding, error) {
+	items, err := rpcArray(value, label)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]modulecatalog.ChainKVBinding, 0, len(items))
+	for index, item := range items {
+		object, err := rpcObjectItem(item, label, index)
+		if err != nil {
+			return nil, err
+		}
+		key := strings.TrimSpace(stringValue(object["key"]))
+		if key == "" {
+			return nil, fmt.Errorf("%s item %d key is required", label, index+1)
+		}
+		if strings.Contains(key, "{") && !strings.Contains(key, "{target}") {
+			return nil, fmt.Errorf("%s item %d contains an unsupported key template", label, index+1)
+		}
+		out = append(out, modulecatalog.ChainKVBinding{
+			Key: key, ConfigKey: strings.TrimSpace(stringValue(object["configKey"])),
+			StepID:      strings.TrimSpace(stringValue(object["stepId"])),
+			Description: stringValue(object["description"]), Required: boolValue(object["required"]),
+		})
+	}
+	return out, nil
 }
 
 func stepContractsFromRPC(value map[string]any) (modulecatalog.StepContractSet, error) {

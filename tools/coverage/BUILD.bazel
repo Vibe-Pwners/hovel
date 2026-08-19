@@ -1,0 +1,72 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "go_branch_inventory",
+    srcs = ["go_branch_inventory.go"],
+    data = [
+        "//sdk/go/hovel:sources",
+        "//sdk/go/hoveltest:sources",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "go_branch_instrument",
+    srcs = [
+        "go_branch_instrument.go",
+        "go_branch_instrument_main.go",
+    ],
+    deps = ["@org_golang_x_tools//go/ast/astutil"],
+)
+
+go_test(
+    name = "go_branch_instrument_test",
+    srcs = [
+        "go_branch_instrument.go",
+        "go_branch_instrument_test.go",
+    ],
+    deps = ["@org_golang_x_tools//go/ast/astutil"],
+)
+
+go_test(
+    name = "go_branch_inventory_test",
+    srcs = [
+        "go_branch_inventory.go",
+        "go_branch_inventory_test.go",
+    ],
+)
+
+py_binary(
+    name = "python_sdk_coverage",
+    srcs = ["python_sdk_coverage.py"],
+    data = [
+        "//sdk/python:coverage_test_sources",
+        "//sdk/python:hovel_sdk_test_sources",
+        "//sdk/python:mesh_bridge_test_sources",
+    ],
+    deps = [
+        "//sdk/python:hovel_sdk",
+        "@lint_pypi//coverage",
+        "@lint_pypi//pytest",
+    ],
+)
+
+py_binary(
+    name = "rust_sdk_coverage",
+    testonly = True,
+    srcs = ["rust_sdk_coverage.py"],
+    args = [
+        "$(rootpath //sdk/rust/hovel:hovel_coverage_test)",
+        "$(rootpath @llvm_mingw_ucrt_linux_x86_64//:llvm_profdata_bin)",
+        "$(rootpath @llvm_mingw_ucrt_linux_x86_64//:llvm_cov_bin)",
+    ],
+    data = [
+        "//sdk/rust/hovel:hovel_coverage_test",
+        "@llvm_mingw_ucrt_linux_x86_64//:llvm_cov_bin",
+        "@llvm_mingw_ucrt_linux_x86_64//:llvm_coverage_files",
+        "@llvm_mingw_ucrt_linux_x86_64//:llvm_profdata_bin",
+    ],
+)

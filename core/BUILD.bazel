@@ -35,12 +35,14 @@ filegroup(
     name = "build",
     srcs = [
         "//cmd/hovel",
+        "//cmd/hovel-operator-parity",
         "//cmd/hovel-ui-catalog",
         "//schemas:descriptor_schemas",
     ],
 )
 
 _COVERAGE_LAYER_TESTS = [
+    "//internal/app/agentintegration:agentintegration_test",
     "//internal/app/chainruntime:chainruntime_test",
     "//internal/app/commands:commands_test",
     "//internal/app/hovelconfig:hovelconfig_test",
@@ -63,6 +65,7 @@ _COVERAGE_LAYER_TESTS = [
 ]
 
 _CI_TESTS = [
+    "//internal/adapters/mcp:mcp_contract_test",
     "//internal/adapters/pki/memory:memory_test",
     "//internal/adapters/cli:cli_test",
     "//internal/adapters/commandmode:commandmode_e2e_test",
@@ -77,6 +80,7 @@ _CI_TESTS = [
     "//internal/adapters/terminallog:terminallog_test",
     "//internal/adapters/uicatalog:uicatalog_test",
     "//internal/infra/daemonmanager:daemonmanager_test",
+    "//internal/infra/agentintegration:agentintegration_test",
     "//internal/infra/pki:pki_test",
     "//internal/moduleruntime/pythonrpc:credential_provider_test",
     "//internal/moduleruntime/pythonrpc:process_lifecycle_test",

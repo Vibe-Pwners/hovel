@@ -103,7 +103,11 @@ def package_release(
 
     if not manifest_path.exists():
         print(f"manifest.json not found in {release_dir}", file=sys.stderr)
-        print("Run: task picblobs:stage-release", file=sys.stderr)
+        print(
+            "Run: aspect run --bazel-flag=--config=picblobs_cross "
+            "//modules/picblobs/tools:stage_blobs_release --",
+            file=sys.stderr,
+        )
         return []
 
     if not blobs_dir.exists():

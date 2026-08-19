@@ -3,17 +3,17 @@ min_version: "2.0.0"
 pre-commit:
   jobs:
     - name: format-staged
-      run: task fmt -- {staged_files}
+      run: aspect run //modules/picblobs/tools:format_write -- {staged_files}
       stage_fixed: true
     - name: lint-staged
-      run: task lint -- {staged_files}
+      run: aspect run //modules/picblobs/tools:lint_run -- {staged_files}
 
 pre-push:
   parallel: true
   jobs:
     - name: format-check
-      run: task fmt:check
+      run: aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:format_check
     - name: lint-check
-      run: task lint:check
+      run: aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:lint_check
     - name: c-lint-check
-      run: task lint:c
+      run: aspect build --bazel-flag=--config=picblobs_lint //modules/picblobs/src/... //modules/picblobs/tests/...

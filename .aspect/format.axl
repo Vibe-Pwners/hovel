@@ -1,0 +1,18 @@
+load(".aspect/helpers.axl", "run_steps")
+
+def _impl(ctx: TaskContext) -> int:
+    root = ctx.std.env.aspect_root_dir()
+    return run_steps(ctx, [
+        (["run", "//tools/lint:gofmt_workspace", "--", "--mode=write"], root + "/core"),
+        (["run", "//:gazelle"], root + "/core"),
+        (["run", "@hovel_core//tools/lint:ruff", "--", "check", "--fix-only", "--config", "sdk/python/pyproject.toml", "sdk/python/hovel_sdk", "sdk/compat", "modules/examples/python"], root),
+        (["run", "@hovel_core//tools/lint:ruff", "--", "format", "--config", "sdk/python/pyproject.toml", "sdk/python/hovel_sdk", "sdk/compat", "modules/examples/python"], root),
+        (["run", "//tools/lint:gofmt_workspace", "--", "--mode=write", "--path", "../sdk/go/hovel"], root + "/core"),
+        (["run", "//tools/lint:format_rust_workspace", "--", "--mode=write"], root + "/core"),
+        (["run", "//tools/lint:gofmt_workspace", "--", "--mode=write", "--path", "../modules/squatter"], root + "/core"),
+    ])
+
+hovel_format = task(
+    summary = "Format all repository slices with their Bazel-managed tools.",
+    implementation = _impl,
+)

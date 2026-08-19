@@ -9,10 +9,13 @@ nogo(
 
 exports_files([
     ".clang-format",
+    ".github/actions/setup-hovel/action.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/pages.yml",
+    ".github/workflows/release.yml",
     "LICENSE",
     "VERSION",
+    ".claude-plugin/marketplace.json",
     "go.work.bazel",
     "scripts/demo-mcp-agent-tmux.sh",
     "scripts/demo-step-setup.sh",
@@ -42,20 +45,36 @@ test_suite(
     name = "repo_quality_test",
     tests = [
         "//repo-tools/deps:update_python_locks_test",
+        "//repo-tools/release:release_tool_test",
         "//repo-tools/tasks:checkout_test",
+        "//repo-tools/tasks:github_workflows_test",
         "//tools/bazel/buildifier:buildifier_test",
         "//tools/bazel/policy:repo_policy_test",
     ],
 )
 
 test_suite(
+    name = "agent_test",
+    tests = ["//agent/tools:package_agent_test"],
+)
+
+test_suite(
     name = "sdk_test",
     tests = [
+        "//sdk/compat:legacy_runtime_compatibility_test",
+        "//sdk/compat:protocol_conformance_test",
+        "//sdk/compat:public_api_baseline_test",
+        "//sdk/go/hovel:hovel_branch_test",
         "//sdk/go/hovel:hovel_test",
+        "//sdk/go/hoveltest:hoveltest_branch_test",
         "//sdk/go/hoveltest:hoveltest_test",
+        "//sdk/python:coverage_test",
         "//sdk/python:hovel_sdk_test",
         "//sdk/python:mesh_bridge_test",
         "//sdk/rust/hovel:hovel_test",
+        "//tools/coverage:go_branch_instrument_test",
+        "//tools/coverage:go_branch_inventory_test",
+        "//tools/coverage/branchruntime:branchruntime_test",
     ],
 )
 
@@ -169,6 +188,7 @@ test_suite(
     name = "docs_test",
     tests = [
         "//docs/demo:standard_verification_test",
+        "//docs/demo:vhs_timing_test",
         "//docs/site:daemon_rpc_openapi_test",
         "//docs/site:provider_docs_parity_test",
         "//docs/site:report_ui_test",
@@ -177,6 +197,7 @@ test_suite(
         "//docs/tools/demo/mcpagent:mcpagent_test",
         "//docs/tools/docs:materialize_site_test",
         "//docs/tools/docs:pages_workflow_test",
+        "//docs/tools/docs:site_revision_test",
         "//tools/testreport:lintreport_test",
         "//tools/testreport:testreport_test",
     ],

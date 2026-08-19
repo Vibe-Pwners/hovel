@@ -2,26 +2,26 @@
 <article>
   <h1 id="formatting-and-linting">Formatting and Linting</h1>
   <p>
-    Run quality workflows through Task from the repository root. The underlying
+    Run quality workflows through Aspect CLI from the repository root. The underlying
     formatters, linters, Python runtime, and C toolchain are pinned Bazel inputs;
     no Picblobs virtual environment or host linter installation is required.
   </p>
   <pre data-lang="bash"><code># Apply formatting
-task picblobs:fmt
+aspect run //modules/picblobs/tools:format_write --
 
 # Read-only formatting and Python/Bazel lint checks
-task picblobs:fmt-check
-task picblobs:lint-check
+aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:format_check
+aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:lint_check
 
 # Full Picblobs CI gate
-task picblobs:ci
+aspect hovel-check modules
 
 # Optional C static analysis target
-task --dir modules/picblobs lint:c
+aspect hovel-check modules
 </code></pre>
   <p>
     Optional repository hooks can be installed with
-    <code>task hooks:install</code>. They call Task-backed checks rather than
+    <code>aspect hovel-hooks</code>. They call Aspect-backed checks rather than
     exposing the underlying tool commands.
   </p>
 
@@ -63,16 +63,16 @@ task --dir modules/picblobs lint:c
 
   <h2 id="complexity">Complexity</h2>
   <pre data-lang="bash"><code># Check the complete declared source set
-task picblobs:lint-check
+aspect test --bazel-flag=--config=picblobs_quality //modules/picblobs/tools:lint_check
 
 # Run the lint materializer and forward an explicit source selection
-task picblobs:lint -- src/payload/hello.c python/tests/test_python_api.py
+aspect run //modules/picblobs/tools:lint_run -- -- src/payload/hello.c python/tests/test_python_api.py
 </code></pre>
   <p>
     The Bazel-managed lint target runs Lizard with a maximum cyclomatic
     complexity number (CCN) of <code>10</code>. Its declared input set excludes
     build artifacts, virtual environments, and generated output trees. Explicit
     Picblobs-relative paths forwarded after <code>--</code> narrow the
-    materializer to those sources without bypassing the Task/Bazel toolchain.
+    materializer to those sources without bypassing the Aspect/Bazel toolchain.
   </p>
 </article>

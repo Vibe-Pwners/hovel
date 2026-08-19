@@ -8,6 +8,8 @@ import re
 import shutil
 from pathlib import Path
 
+import site_revision
+
 
 REPORT_DIRECTORIES = ("data", "logs", "xml", "artifacts", "jobs", "coverage", "linters")
 
@@ -30,6 +32,8 @@ def main() -> int:
         report = resolve_workspace_path(workspace, args.report_dir)
         copy_report(report, destination / "reports/tests/latest")
         report_state = "generated evidence"
+
+    site_revision.refresh_tree(destination)
 
     version = published_version(destination / "index.html")
     print(f"docs site materialized: _site (version {version}, reports: {report_state})")
@@ -70,7 +74,7 @@ def copy_tree(source: Path, destination: Path) -> None:
 def copy_report(source: Path, destination: Path) -> None:
     data = source / "data/report.json"
     if not data.is_file():
-        raise SystemExit(f"missing generated report evidence: {data}; run `task test:report`")
+        raise SystemExit(f"missing generated report evidence: {data}; run `aspect hovel-report`")
     for name in REPORT_DIRECTORIES:
         child = source / name
         if child.is_dir():

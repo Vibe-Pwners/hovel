@@ -13,3 +13,22 @@ py_test(
     python_version = "PY3",
     deps = [requirement("pytest")],
 )
+
+py_test(
+    name = "github_workflows_test",
+    size = "small",
+    srcs = ["github_workflows_test.py"],
+    args = [
+        "$(rootpath //:.github/actions/setup-hovel/action.yml)",
+        "$(rootpath //:.github/workflows/ci.yml)",
+        "$(rootpath //:.github/workflows/pages.yml)",
+        "$(rootpath //:.github/workflows/release.yml)",
+    ],
+    data = [
+        "//:.github/actions/setup-hovel/action.yml",
+        "//:.github/workflows/ci.yml",
+        "//:.github/workflows/pages.yml",
+        "//:.github/workflows/release.yml",
+    ],
+    python_version = "PY3",
+)

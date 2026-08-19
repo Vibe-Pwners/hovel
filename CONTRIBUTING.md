@@ -7,29 +7,26 @@ test, and structure changes.
 
 Install:
 
-- [Task](https://taskfile.dev/) — the single entry point for every build command
+- [Aspect CLI](https://aspect.build/cli) — the single entry point for every build command
 - [bazelisk](https://github.com/bazelbuild/bazelisk) (honors `core/.bazelversion`)
 
 Python, Go, Rust, Node, formatting, linting, documentation, and cross-compilation
 tools are declared build inputs; do not install parallel host copies for
 repository workflows. Install [Lefthook](https://lefthook.dev/) only if you want
-the optional Git-hook integration exposed by `task hooks:install`. Host services
+the optional Git-hook integration. Host services
 such as Docker, QEMU, Wine, or ffmpeg are needed only by tasks that cross those
 specific system boundaries.
 
-**Drive the build only through Task** (`task <name>`); do not invoke `bazel`,
-`gofmt`, `uv`, or `lefthook` directly. `Taskfile.yml` is the single source of
-truth, and CI runs the same tasks. If you need an operation that has no task,
-add one to `Taskfile.yml` rather than running the tool by hand. `task --list`
-shows everything.
+**Drive the build only through Aspect CLI** (`aspect <command>`); do not invoke
+`bazel`, `gofmt`, `uv`, or `lefthook` directly. The `.aspect/` configuration is
+the source of truth, and CI runs the same commands. Add missing workflows as AXL
+tasks rather than invoking underlying tools by hand. `aspect help` shows them.
 
 Then:
 
 ```sh
-task hooks:install   # optional: run checks on commit
-task checkout:status # show which checkout slices are present
-task check           # run checks available in this checkout
-task ci              # full-checkout gate for wired slices
+python3 repo-tools/tasks/checkout.py status # show checkout slices
+aspect hovel-check                         # full verification gate
 ```
 
 ## Repository layout
@@ -42,34 +39,34 @@ Hovel is split into sparse-checkout friendly slices:
 | `sdk/` | Python, Go, and Rust module SDKs. SDKs are outside `core/` so SDK work can be checked out independently from framework internals. |
 | `modules/` | In-repo example modules, Squatter payload/provider code, module packaging tools, and lab helpers. |
 | `docs/` | GitHub Pages source, book content, demos, and documentation tooling. |
-| `repo-tools/` | Small repository-level helpers used by the root Task dispatcher. |
+| `repo-tools/` | Small repository-level helpers used by Aspect workflows. |
 
 ## Before you open a PR
 
 For partial checkouts, run the available-slice gate while iterating:
 
 ```sh
-task check
+aspect hovel-check
 ```
 
 Before opening a PR, run the same full-checkout suite CI runs:
 
 ```sh
-task ci
+aspect hovel-check
 ```
 
-`task ci` first verifies that the full source tree is checked out. It then runs
+`aspect hovel-check` first verifies that the full source tree is checked out. It then runs
 repository policy and quality checks, the core lint/build/test/race/fuzz/coverage
 gate, all three SDK build/lint/test gates, module and Picblobs build/test gates,
 and the hermetic Astro documentation build and validators. The slices remain
-separate so `task check` can validate a sparse checkout without pulling
-unrelated code, while `task ci` proves the complete integration graph.
+separate so `aspect hovel-check` can validate a sparse checkout without pulling
+unrelated code, while `aspect hovel-check` proves the complete integration graph.
 
 If you add, move, or remove Go files or imports, regenerate formatting and
 `BUILD.bazel` metadata:
 
 ```sh
-task fmt
+aspect hovel-format
 ```
 
 When you add a new core test target, also add it to the `test_suite` in
@@ -92,7 +89,7 @@ infra    -> app -> domain
 
 ## Code style
 
-- Go code is formatted with `gofmt` and checked with golangci-lint; `task fmt`
+- Go code is formatted with `gofmt` and checked with golangci-lint; `aspect hovel-format`
   formats wired core and Go SDK sources in place.
 - Match the surrounding code's naming, error-wrapping, and defensive-copy
   conventions (maps/slices are cloned at boundaries).
@@ -102,7 +99,7 @@ infra    -> app -> domain
 ## Tests
 
 - New behavior needs tests. Coverage ratchets and long-term goals are documented
-  in `docs/site/src/content/spec/testing-roadmap.html`; run `task coverage` for the current
+  in `docs/site/src/content/spec/testing-roadmap.html`; run `aspect test --coverage` for the current
   core floors.
 - Production commands should exercise the daemon boundary.
 - Mock modules exist for tests and examples only and are not part of the

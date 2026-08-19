@@ -77,6 +77,10 @@ type RunLogPoller interface {
 	PollOperationChainLogs(context.Context, string, string, uint64) (RunLogPollResult, error)
 }
 
+type RunChainKVReader interface {
+	GetChainKV(context.Context, string, string, string) (string, bool, uint64, error)
+}
+
 type RunLogPollResult struct {
 	Last uint64
 	Logs []RunPublishedLog
@@ -241,6 +245,7 @@ type ModuleInspector interface {
 }
 
 type RunMockExploitRequest struct {
+	ThrowID      string
 	Operation    string
 	Chain        string
 	ModuleID     string
@@ -249,6 +254,11 @@ type RunMockExploitRequest struct {
 	ChainConfig  map[string]string
 	TargetConfig map[string]string
 	ThrowStarted string
+}
+
+type RunThrowKVClient interface {
+	BeginChainKV(context.Context, string, string, string) error
+	SealChainKV(context.Context, string, string, string) (operatorsession.ChainKVSnapshot, error)
 }
 
 type RunPayloadCommandListRequest = run.PayloadCommandListRequest
@@ -352,16 +362,18 @@ type LogEntry struct {
 }
 
 type RunMockExploitResponse struct {
-	RunID             string
-	ModuleID          string
-	Target            string
-	State             string
-	Summary           string
-	Findings          []Finding
-	Artifacts         []Artifact
-	Logs              []LogEntry
-	Sessions          []SessionRef
-	InstalledPayloads []InstalledPayloadDescriptor
+	RunID              string
+	ModuleID           string
+	Target             string
+	State              string
+	Summary            string
+	Findings           []Finding
+	Artifacts          []Artifact
+	Logs               []LogEntry
+	Sessions           []SessionRef
+	InstalledPayloads  []InstalledPayloadDescriptor
+	ChainKVRevision    uint64
+	ChainKVMutatedKeys []string
 }
 
 type CapabilityChainRequest struct {
@@ -469,19 +481,31 @@ type ThrowPlanPayload struct {
 }
 
 type ThrowPlanRecord struct {
-	ID             string                       `json:"id"`
-	ConfirmationID string                       `json:"confirmationId"`
-	PlanHash       string                       `json:"planHash"`
-	Workspace      string                       `json:"workspace"`
-	Operation      string                       `json:"operation,omitempty"`
-	Chain          string                       `json:"chain"`
-	Targets        []string                     `json:"targets"`
-	Modules        []string                     `json:"modules,omitempty"`
-	Steps          []CapabilityChainStepRef     `json:"steps,omitempty"`
-	ChainConfig    map[string]string            `json:"chainConfig,omitempty"`
-	TargetConfigs  map[string]map[string]string `json:"targetConfigs,omitempty"`
-	Review         string                       `json:"review"`
-	Intent         string                       `json:"intent"`
+	ID              string                       `json:"id"`
+	ConfirmationID  string                       `json:"confirmationId"`
+	PlanHash        string                       `json:"planHash"`
+	Workspace       string                       `json:"workspace"`
+	Operation       string                       `json:"operation,omitempty"`
+	Chain           string                       `json:"chain"`
+	Targets         []string                     `json:"targets"`
+	Modules         []string                     `json:"modules,omitempty"`
+	Steps           []CapabilityChainStepRef     `json:"steps,omitempty"`
+	ChainConfig     map[string]string            `json:"chainConfig,omitempty"`
+	TargetConfigs   map[string]map[string]string `json:"targetConfigs,omitempty"`
+	Review          string                       `json:"review"`
+	Intent          string                       `json:"intent"`
+	ChainKVRevision uint64                       `json:"chainKvRevision,omitempty"`
+	ChainKVBindings []ThrowKVBinding             `json:"chainKvBindings,omitempty"`
+}
+
+type ThrowKVBinding struct {
+	Target         string `json:"target"`
+	ConsumerModule string `json:"consumerModule"`
+	ConfigKey      string `json:"configKey,omitempty"`
+	Key            string `json:"key"`
+	Source         string `json:"source"`
+	Value          string `json:"value,omitempty"`
+	ProducerModule string `json:"producerModule,omitempty"`
 }
 
 type ThrowRecord struct {
@@ -814,6 +838,28 @@ func HovelRegistry(runtime Runtime) Registry {
 			Aliases: [][]string{{"chains", "config", "list"}},
 			Summary: "List active chain configuration.",
 			Handler: chainConfigListHandler(runtime),
+		},
+		Definition{
+			Path: []string{"chain", "kv", "get"}, Summary: "Get one chain-scoped key/value entry.",
+			Positionals: []Positional{{Name: "key", Help: "KV key", Required: true}},
+			Handler:     chainKVGetHandler(runtime),
+		},
+		Definition{
+			Path: []string{"chain", "kv", "list"}, Summary: "List chain-scoped KV keys.",
+			Options: []Option{stringOption("prefix", "", "Filter keys by prefix"), boolOption("include-values", "", "Include values")},
+			Handler: chainKVListHandler(runtime),
+		},
+		Definition{
+			Path: []string{"chain", "kv", "set"}, Summary: "Set one chain-scoped key/value entry.",
+			Positionals: []Positional{{Name: "key", Help: "KV key", Required: true}, {Name: "value", Help: "KV value", Required: true}},
+			Options:     []Option{stringOption("if-revision", "", "Require the current KV revision")},
+			Handler:     chainKVSetHandler(runtime),
+		},
+		Definition{
+			Path: []string{"chain", "kv", "delete"}, Summary: "Delete one chain-scoped key/value entry.",
+			Positionals: []Positional{{Name: "key", Help: "KV key", Required: true}},
+			Options:     []Option{stringOption("if-revision", "", "Require the current KV revision")},
+			Handler:     chainKVDeleteHandler(runtime),
 		},
 		Definition{
 			Path:    []string{"chain", "list"},
@@ -2160,6 +2206,122 @@ func chainConfigListHandler(runtime Runtime) Handler {
 			return Result{Human: "No chain config set\n\nNext: config interactive"}, nil
 		}
 		return Result{Human: "Chain config\n" + availableConfigLines(state.Config, requirements)}, nil
+	}
+}
+
+type chainKVOperatorSession interface {
+	ChainKVSnapshot() (operatorsession.ChainKVSnapshot, error)
+	ApplyChainKV(*uint64, []operatorsession.ChainKVMutation) (operatorsession.ChainKVSnapshot, error)
+}
+
+func chainKVSession(runtime Runtime) (chainKVOperatorSession, error) {
+	if runtime.Session == nil {
+		return nil, activeChainRequiredError()
+	}
+	session, ok := runtime.Session.(chainKVOperatorSession)
+	if !ok {
+		return nil, errors.New("chain kv is not configured for this operator session")
+	}
+	return session, nil
+}
+
+func chainKVGetHandler(runtime Runtime) Handler {
+	return func(ctx context.Context, invocation Invocation) (Result, error) {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		session, err := chainKVSession(runtime)
+		if err != nil {
+			return Result{}, err
+		}
+		snapshot, err := session.ChainKVSnapshot()
+		if err != nil {
+			return Result{}, err
+		}
+		key := invocation.Positional("key")
+		value, found := snapshot.Entries[key]
+		payload := map[string]any{"revision": snapshot.Revision, "key": key, "found": found}
+		if found {
+			payload["value"] = value
+		}
+		if !found {
+			return Result{Human: fmt.Sprintf("Chain KV key not found: %s", key), JSON: payload}, nil
+		}
+		return Result{Human: fmt.Sprintf("%s=%s (revision %d)", key, value, snapshot.Revision), JSON: payload}, nil
+	}
+}
+
+func chainKVListHandler(runtime Runtime) Handler {
+	return func(ctx context.Context, invocation Invocation) (Result, error) {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		session, err := chainKVSession(runtime)
+		if err != nil {
+			return Result{}, err
+		}
+		snapshot, err := session.ChainKVSnapshot()
+		if err != nil {
+			return Result{}, err
+		}
+		prefix := invocation.Option("prefix")
+		includeValues := invocation.Flag("include-values")
+		keys := make([]string, 0, len(snapshot.Entries))
+		entries := map[string]string{}
+		for key, value := range snapshot.Entries {
+			if prefix != "" && !strings.HasPrefix(key, prefix) {
+				continue
+			}
+			keys = append(keys, key)
+			if includeValues {
+				entries[key] = value
+			}
+		}
+		sort.Strings(keys)
+		payload := map[string]any{"revision": snapshot.Revision, "keys": keys}
+		lines := append([]string{fmt.Sprintf("Chain KV revision %d", snapshot.Revision)}, keys...)
+		if includeValues {
+			payload["entries"] = entries
+			lines = []string{fmt.Sprintf("Chain KV revision %d", snapshot.Revision)}
+			for _, key := range keys {
+				lines = append(lines, key+"="+entries[key])
+			}
+		}
+		return Result{Human: strings.Join(lines, "\n"), JSON: payload}, nil
+	}
+}
+
+func chainKVSetHandler(runtime Runtime) Handler {
+	return chainKVMutationHandler(runtime, "set")
+}
+
+func chainKVDeleteHandler(runtime Runtime) Handler {
+	return chainKVMutationHandler(runtime, "delete")
+}
+
+func chainKVMutationHandler(runtime Runtime, operation string) Handler {
+	return func(ctx context.Context, invocation Invocation) (Result, error) {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		session, err := chainKVSession(runtime)
+		if err != nil {
+			return Result{}, err
+		}
+		var expected *uint64
+		if raw := strings.TrimSpace(invocation.Option("if-revision")); raw != "" {
+			value, parseErr := strconv.ParseUint(raw, 10, 64)
+			if parseErr != nil {
+				return Result{}, fmt.Errorf("invalid chain kv revision %q", raw)
+			}
+			expected = &value
+		}
+		mutation := operatorsession.ChainKVMutation{Operation: operation, Key: invocation.Positional("key"), Value: invocation.Positional("value")}
+		snapshot, err := session.ApplyChainKV(expected, []operatorsession.ChainKVMutation{mutation})
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{Human: fmt.Sprintf("Chain KV %s: %s (revision %d)", operation, mutation.Key, snapshot.Revision), JSON: map[string]any{"revision": snapshot.Revision, "key": mutation.Key, "operation": operation}}, nil
 	}
 }
 
@@ -3615,8 +3777,34 @@ func throwHandler(runtime Runtime) Handler {
 				return Result{}, err
 			}
 			defer func() { logCommandError("close legacy throw daemon client", client.Close()) }()
+			kvClient, ok := client.(RunThrowKVClient)
+			if ok {
+				if err := kvClient.BeginChainKV(ctx, payload.ThrowID, planOperation(plan), throw.Chain); err != nil {
+					return Result{}, err
+				}
+			}
+			sealed := !ok
+			defer func() {
+				if !sealed {
+					snapshot, sealErr := kvClient.SealChainKV(context.Background(), payload.ThrowID, planOperation(plan), throw.Chain)
+					logCommandError("seal throw kv after failed throw", sealErr)
+					if sealErr == nil {
+						logCommandError("materialize failed throw kv artifact", materializeThrowKVArtifact(context.Background(), runtime, status.WorkspacePath, plan, payload.ThrowID, snapshot))
+					}
+				}
+			}()
 			if err := executeLegacyThrow(ctx, runtime, client, status.WorkspacePath, db, plan, throw, &payload, throwStarted, streamThrowLog); err != nil {
 				return Result{}, err
+			}
+			if ok {
+				snapshot, err := kvClient.SealChainKV(ctx, payload.ThrowID, planOperation(plan), throw.Chain)
+				if err != nil {
+					return Result{}, err
+				}
+				sealed = true
+				if err := materializeThrowKVArtifact(ctx, runtime, status.WorkspacePath, plan, payload.ThrowID, snapshot); err != nil {
+					return Result{}, err
+				}
 			}
 		}
 		completeEntries := throwCompleteEntries(payload, throwStarted)
@@ -3663,7 +3851,11 @@ func executeLegacyThrow(ctx context.Context, runtime Runtime, client RunClient, 
 	modules := legacyExecutionModuleIDsForThrow(runtime, db, throw)
 	autoConnectSquatter := shouldAutoConnectSquatterPayloads(runtime, db, throw)
 	for _, target := range throw.Targets {
+		produced := map[string]bool{}
 		for _, moduleID := range modules {
+			if err := requireDynamicChainKV(plan, target, moduleID, produced); err != nil {
+				return err
+			}
 			runIndex := len(payload.Results) + 1
 			startEntries := throwRunStartEntries(throw.Chain, target, moduleID, runIndex, len(throw.Targets)*len(modules), throwStarted)
 			if runtime.Session != nil && feedbackPublished(runtime.Session) {
@@ -3677,6 +3869,7 @@ func executeLegacyThrow(ctx context.Context, runtime Runtime, client RunClient, 
 				return err
 			}
 			result, err := client.RunMockExploit(ctx, RunMockExploitRequest{
+				ThrowID:      payload.ThrowID,
 				Operation:    planOperation(plan),
 				Chain:        throw.Chain,
 				ModuleID:     moduleID,
@@ -3688,6 +3881,9 @@ func executeLegacyThrow(ctx context.Context, runtime Runtime, client RunClient, 
 			stopRunLogs()
 			if err != nil {
 				return err
+			}
+			for _, key := range result.ChainKVMutatedKeys {
+				produced[key] = true
 			}
 			if !streamedRunLogs {
 				emitStreamLog(streamLog, throwModuleLogEntries(result, throwStarted, throw.Chain)...)
@@ -3710,6 +3906,18 @@ func executeLegacyThrow(ctx context.Context, runtime Runtime, client RunClient, 
 				logCommandError("append throw run result log", runtime.Session.AppendLogToChain(throw.Chain, resultEntries...))
 			}
 			emitStreamLog(streamLog, resultEntries...)
+		}
+	}
+	return nil
+}
+
+func requireDynamicChainKV(plan ThrowPlanRecord, target, moduleID string, produced map[string]bool) error {
+	for _, binding := range plan.ChainKVBindings {
+		if binding.Source != "dynamic" || binding.Target != target || binding.ConsumerModule != moduleID {
+			continue
+		}
+		if !produced[binding.Key] {
+			return fmt.Errorf("dynamic chain kv binding %s from %s was not produced", binding.Key, binding.ProducerModule)
 		}
 	}
 	return nil
@@ -3946,6 +4154,29 @@ func materializeRunArtifacts(ctx context.Context, runtime Runtime, workspacePath
 	return nil
 }
 
+func materializeThrowKVArtifact(ctx context.Context, runtime Runtime, workspacePath string, plan ThrowPlanRecord, throwID string, snapshot operatorsession.ChainKVSnapshot) error {
+	if runtime.Artifacts == nil {
+		return nil
+	}
+	data, err := json.MarshalIndent(struct {
+		SchemaVersion int               `json:"schemaVersion"`
+		ThrowID       string            `json:"throwId"`
+		Operation     string            `json:"operation"`
+		Chain         string            `json:"chain"`
+		Revision      uint64            `json:"revision"`
+		Entries       map[string]string `json:"entries"`
+	}{1, throwID, planOperation(plan), plan.Chain, snapshot.Revision, snapshot.Entries}, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = runtime.Artifacts.MaterializeArtifact(ctx, ArtifactMaterialization{
+		Workspace: workspacePath, ThrowID: throwID, RunID: throwID,
+		ModuleID: "hovel/chain-kv", CreatedAt: time.Now().UTC(),
+		Artifact: Artifact{Name: "chain-kv.json", Kind: "application/vnd.hovel.chain-kv+json", Data: string(data) + "\n"},
+	})
+	return err
+}
+
 func recordInstalledPayloadsForRun(ctx context.Context, runtime Runtime, workspacePath string, plan ThrowPlanRecord, payload *ThrowPayload, resultIndex int) ([]InstalledPayloadRecord, error) {
 	if runtime.Payloads == nil || resultIndex < 0 || resultIndex >= len(payload.Results) {
 		return nil, nil
@@ -4150,9 +4381,25 @@ func throwConfirmationPrompt(plan ThrowPlanRecord, action string) ConfirmationPr
 			{Label: "modules", Value: formatReviewList(plan.Modules)},
 			{Label: "chain config", Value: formatReviewConfig(plan.ChainConfig)},
 			{Label: "target config", Value: formatReviewTargetConfigs(plan.Targets, plan.TargetConfigs)},
+			{Label: "chain kv", Value: formatReviewChainKV(plan)},
 			{Label: "plan hash", Value: shortPlanHash(plan.PlanHash), Muted: true},
 		},
 	}
+}
+
+func formatReviewChainKV(plan ThrowPlanRecord) string {
+	if len(plan.ChainKVBindings) == 0 {
+		return fmt.Sprintf("revision %d; no bindings", plan.ChainKVRevision)
+	}
+	parts := make([]string, 0, len(plan.ChainKVBindings))
+	for _, binding := range plan.ChainKVBindings {
+		if binding.Source == "dynamic" {
+			parts = append(parts, fmt.Sprintf("WARNING dynamic %s:%s <- %s:%s", binding.Target, binding.ConfigKey, binding.ProducerModule, binding.Key))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s <- %s:%s=%s", binding.Target, binding.ConfigKey, binding.Source, binding.Key, binding.Value))
+	}
+	return fmt.Sprintf("revision %d; %s", plan.ChainKVRevision, strings.Join(parts, "; "))
 }
 
 func shortPlanHash(hash string) string {
@@ -4490,19 +4737,21 @@ func dialDaemonRunClient(ctx context.Context, runtime Runtime, workspacePath str
 func newThrowPlanForExecution(workspacePath string, throw throwExecution) ThrowPlanRecord {
 	hash := planHashForExecution(throw)
 	return ThrowPlanRecord{
-		ID:             "plan-" + stableIDComponent(hash),
-		ConfirmationID: "confirmation-" + stableIDComponent(hash),
-		PlanHash:       hash,
-		Workspace:      workspacePath,
-		Operation:      throw.Operation,
-		Chain:          throw.Chain,
-		Targets:        append([]string(nil), throw.Targets...),
-		Modules:        append([]string(nil), throw.Modules...),
-		Steps:          cloneCapabilityChainStepRefs(throw.Steps),
-		ChainConfig:    cloneStringMap(throw.ChainConfig),
-		TargetConfigs:  cloneTargetConfigs(throw.TargetConfigs),
-		Review:         "operator-confirmed",
-		Intent:         fmt.Sprintf("throw chain %s against %d target(s)", throw.Chain, len(throw.Targets)),
+		ID:              "plan-" + stableIDComponent(hash),
+		ConfirmationID:  "confirmation-" + stableIDComponent(hash),
+		PlanHash:        hash,
+		Workspace:       workspacePath,
+		Operation:       throw.Operation,
+		Chain:           throw.Chain,
+		Targets:         append([]string(nil), throw.Targets...),
+		Modules:         append([]string(nil), throw.Modules...),
+		Steps:           cloneCapabilityChainStepRefs(throw.Steps),
+		ChainConfig:     cloneStringMap(throw.ChainConfig),
+		TargetConfigs:   cloneTargetConfigs(throw.TargetConfigs),
+		Review:          "operator-confirmed",
+		Intent:          fmt.Sprintf("throw chain %s against %d target(s)", throw.Chain, len(throw.Targets)),
+		ChainKVRevision: throw.ChainKVRevision,
+		ChainKVBindings: append([]ThrowKVBinding(nil), throw.ChainKVBindings...),
 	}
 }
 
@@ -4581,21 +4830,25 @@ func planHashForExecution(throw throwExecution) string {
 		operation = operatorsession.DefaultOperation
 	}
 	review := struct {
-		Operation     string                       `json:"operation"`
-		Chain         string                       `json:"chain"`
-		Targets       []string                     `json:"targets"`
-		Modules       []string                     `json:"modules"`
-		Steps         []CapabilityChainStepRef     `json:"steps,omitempty"`
-		ChainConfig   map[string]string            `json:"chainConfig,omitempty"`
-		TargetConfigs map[string]map[string]string `json:"targetConfigs,omitempty"`
+		Operation       string                       `json:"operation"`
+		Chain           string                       `json:"chain"`
+		Targets         []string                     `json:"targets"`
+		Modules         []string                     `json:"modules"`
+		Steps           []CapabilityChainStepRef     `json:"steps,omitempty"`
+		ChainConfig     map[string]string            `json:"chainConfig,omitempty"`
+		TargetConfigs   map[string]map[string]string `json:"targetConfigs,omitempty"`
+		ChainKVRevision uint64                       `json:"chainKvRevision,omitempty"`
+		ChainKVBindings []ThrowKVBinding             `json:"chainKvBindings,omitempty"`
 	}{
-		Operation:     operation,
-		Chain:         throw.Chain,
-		Targets:       append([]string(nil), throw.Targets...),
-		Modules:       append([]string(nil), throw.Modules...),
-		Steps:         cloneCapabilityChainStepRefs(throw.Steps),
-		ChainConfig:   cloneStringMap(throw.ChainConfig),
-		TargetConfigs: cloneTargetConfigs(throw.TargetConfigs),
+		Operation:       operation,
+		Chain:           throw.Chain,
+		Targets:         append([]string(nil), throw.Targets...),
+		Modules:         append([]string(nil), throw.Modules...),
+		Steps:           cloneCapabilityChainStepRefs(throw.Steps),
+		ChainConfig:     cloneStringMap(throw.ChainConfig),
+		TargetConfigs:   cloneTargetConfigs(throw.TargetConfigs),
+		ChainKVRevision: throw.ChainKVRevision,
+		ChainKVBindings: append([]ThrowKVBinding(nil), throw.ChainKVBindings...),
 	}
 	data, err := json.Marshal(review)
 	if err != nil {
@@ -4671,14 +4924,16 @@ func isPendingThrowExistsError(err error, id string) bool {
 }
 
 type throwExecution struct {
-	Operation      string
-	Chain          string
-	Targets        []string
-	Modules        []string
-	Steps          []CapabilityChainStepRef
-	ChainConfig    map[string]string
-	TargetConfigs  map[string]map[string]string
-	SkippedTargets []SkippedTarget
+	Operation       string
+	Chain           string
+	Targets         []string
+	Modules         []string
+	Steps           []CapabilityChainStepRef
+	ChainConfig     map[string]string
+	TargetConfigs   map[string]map[string]string
+	SkippedTargets  []SkippedTarget
+	ChainKVRevision uint64
+	ChainKVBindings []ThrowKVBinding
 }
 
 type SkippedTarget struct {
@@ -4815,6 +5070,7 @@ func throwInputsWithDB(ctx context.Context, runtime Runtime, invocation Invocati
 		modules = append(modules, moduleRef)
 	}
 	targetConfigs = targetConfigsForTargets(targets, targetConfigs)
+	chainKVBindings := planChainKVBindings(db, validationSteps(modules, steps), targets, chainConfig, targetConfigs, nil)
 	var skipped []SkippedTarget
 	if validateTargetCompatibility {
 		var err error
@@ -4824,15 +5080,63 @@ func throwInputsWithDB(ctx context.Context, runtime Runtime, invocation Invocati
 		}
 	}
 	return throwExecution{
-		Operation:      operation,
-		Chain:          chain,
-		Targets:        targets,
-		Modules:        modules,
-		Steps:          steps,
-		ChainConfig:    chainConfig,
-		TargetConfigs:  targetConfigs,
-		SkippedTargets: skipped,
+		Operation:       operation,
+		Chain:           chain,
+		Targets:         targets,
+		Modules:         modules,
+		Steps:           steps,
+		ChainConfig:     chainConfig,
+		TargetConfigs:   targetConfigs,
+		SkippedTargets:  skipped,
+		ChainKVRevision: 0,
+		ChainKVBindings: chainKVBindings,
 	}, nil
+}
+
+func planChainKVBindings(db ModuleDatabase, steps []CapabilityChainStepRef, targets []string, chainConfig map[string]string, targetConfigs map[string]map[string]string, entries map[string]string) []ThrowKVBinding {
+	var bindings []ThrowKVBinding
+	for _, target := range targets {
+		producers := map[string]string{}
+		for _, step := range steps {
+			module, ok := db.Find(step.ModuleID)
+			if !ok {
+				continue
+			}
+			for _, requirement := range module.ChainKV.Requires {
+				if requirement.StepID != "" && requirement.StepID != step.StepID {
+					continue
+				}
+				key := expandChainKVKey(requirement.Key, target)
+				binding := ThrowKVBinding{Target: target, ConsumerModule: step.ModuleID, ConfigKey: requirement.ConfigKey, Key: key}
+				if requirement.ConfigKey != "" {
+					if value, ok := targetConfigs[target][requirement.ConfigKey]; ok {
+						binding.Source, binding.Value = "target-config", value
+						bindings = append(bindings, binding)
+						continue
+					}
+					if value, ok := chainConfig[requirement.ConfigKey]; ok {
+						binding.Source, binding.Value = "chain-config", value
+						bindings = append(bindings, binding)
+						continue
+					}
+				}
+				if producer := producers[key]; producer != "" {
+					binding.Source, binding.ProducerModule = "dynamic", producer
+				} else if value, ok := entries[key]; ok {
+					binding.Source, binding.Value = "chain-kv", value
+				} else {
+					binding.Source = "missing"
+				}
+				bindings = append(bindings, binding)
+			}
+			for _, produced := range module.ChainKV.Produces {
+				if produced.StepID == "" || produced.StepID == step.StepID {
+					producers[expandChainKVKey(produced.Key, target)] = step.ModuleID
+				}
+			}
+		}
+	}
+	return bindings
 }
 
 func validationSteps(modules []string, steps []CapabilityChainStepRef) []CapabilityChainStepRef {
@@ -5905,6 +6209,7 @@ func ValidateState(db ModuleDatabase, state operatorsession.State) modulecatalog
 			issues = append(issues, issue)
 		}
 	}
+	issues = append(issues, validateChainKVBindings(db, state)...)
 	sort.Slice(issues, func(i, j int) bool {
 		if issues[i].Scope != issues[j].Scope {
 			return issues[i].Scope < issues[j].Scope
@@ -5918,6 +6223,65 @@ func ValidateState(db ModuleDatabase, state operatorsession.State) modulecatalog
 		return issues[i].Key < issues[j].Key
 	})
 	return modulecatalog.Validation{Valid: len(issues) == 0, Issues: issues}
+}
+
+func validateChainKVBindings(db ModuleDatabase, state operatorsession.State) []modulecatalog.Issue {
+	available := make(map[string]bool, len(state.KVKeys))
+	for _, key := range state.KVKeys {
+		available[key] = true
+	}
+	producedByTarget := make(map[string]map[string]bool, len(state.Targets))
+	for _, target := range state.Targets {
+		producedByTarget[target] = map[string]bool{}
+	}
+	var issues []modulecatalog.Issue
+	for _, step := range state.Steps {
+		module, ok := db.Find(step.ModuleID)
+		if !ok {
+			continue
+		}
+		for _, target := range state.Targets {
+			for _, binding := range module.ChainKV.Requires {
+				if binding.StepID != "" && binding.StepID != step.StepID {
+					continue
+				}
+				if binding.ConfigKey != "" {
+					if _, ok := state.TargetConfigs[target][binding.ConfigKey]; ok {
+						continue
+					}
+					if _, ok := state.Config[binding.ConfigKey]; ok {
+						continue
+					}
+				}
+				key := expandChainKVKey(binding.Key, target)
+				if !binding.Required || producedByTarget[target][key] || available[key] {
+					continue
+				}
+				issues = append(issues, modulecatalog.Issue{
+					Scope: modulecatalog.ScopeTarget, StepID: step.ID, ModuleID: step.ModuleID,
+					Target: target, Key: key, Message: fmt.Sprintf("missing chain kv key %s", key),
+				})
+			}
+			for _, binding := range module.ChainKV.Produces {
+				if binding.StepID == "" || binding.StepID == step.StepID {
+					producedByTarget[target][expandChainKVKey(binding.Key, target)] = true
+				}
+			}
+		}
+	}
+	return issues
+}
+
+func expandChainKVKey(key, target string) string {
+	var escaped strings.Builder
+	for _, b := range []byte(target) {
+		if b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.ContainsRune("-_.~", rune(b)) {
+			escaped.WriteByte(b)
+		} else {
+			_, _ = fmt.Fprintf(&escaped, "%%%02X", b)
+		}
+	}
+	return strings.ReplaceAll(key, "{target}", escaped.String())
 }
 
 func validateCommandRequirements(scope modulecatalog.Scope, step modulecatalog.StepRef, target string, requirements []modulecatalog.Requirement, values map[string]string) []modulecatalog.Issue {

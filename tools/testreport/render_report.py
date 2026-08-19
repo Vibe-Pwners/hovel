@@ -28,6 +28,7 @@ def main() -> int:
         help="bazel-testlogs directory to scan as a fallback or enrichment source.",
     )
     parser.add_argument("--coverage-json", action="append", default=[], help="Coverage result JSON to ingest.")
+    parser.add_argument("--operator-parity", action="append", default=[], help="hovel.operator-parity/v1 evidence to ingest.")
     parser.add_argument("--squatter-lcov", default="", help="Squatter aggregate LCOV report to ingest.")
     parser.add_argument("--job-summary", action="append", default=[], help="Structured test job summary to ingest.")
     parser.add_argument(
@@ -48,6 +49,7 @@ def main() -> int:
     cache_roots = [resolve(repo, item) for item in args.cache_root]
     scan_roots = [resolve(repo, item) for item in args.scan_testlogs]
     coverage_json_files = [resolve(repo, item) for item in args.coverage_json]
+    operator_parity_files = [resolve(repo, item) for item in args.operator_parity]
     job_summary_files = [resolve(repo, item) for item in args.job_summary]
     lint_report_files = [resolve(repo, item) for item in args.lint_report]
     if not scan_roots:
@@ -67,6 +69,7 @@ def main() -> int:
         commit=commit,
         ref=args.ref,
         coverage_json_files=coverage_json_files,
+        operator_parity_files=operator_parity_files,
         coverage_lcov_files=[("Squatter Go", resolve(repo, args.squatter_lcov), 90.0)] if args.squatter_lcov else [],
         job_summary_files=job_summary_files,
         lint_report_files=lint_report_files,

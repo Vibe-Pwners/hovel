@@ -25,7 +25,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "ffmpeg_bin",
-    srcs = ["bin/ffmpeg"],
+    srcs = ["ffmpeg"],
 )
 """
 
@@ -99,6 +99,25 @@ filegroup(
         ":clang_tidy_runtime",
     ],
 )
+
+filegroup(
+    name = "llvm_cov_bin",
+    srcs = ["bin/llvm-cov"],
+)
+
+filegroup(
+    name = "llvm_profdata_bin",
+    srcs = ["bin/llvm-profdata"],
+)
+
+filegroup(
+    name = "llvm_coverage_files",
+    srcs = [
+        ":llvm_cov_bin",
+        ":llvm_profdata_bin",
+        ":clang_tidy_runtime",
+    ],
+)
 """
 
 _TOOLS = {
@@ -142,9 +161,9 @@ _TOOLS = {
         rule = "http_archive",
         attrs = {
             "build_file_content": _FFMPEG_BUILD,
-            "sha256": "8a3a9d2919b687602dfed430e0397779405589357e7108950e506a3291af9371",
-            "strip_prefix": "ffmpeg-n8.1.2-22-g94138f6973-linux64-gpl-8.1",
-            "urls": ["https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-10-13-44/ffmpeg-n8.1.2-22-g94138f6973-linux64-gpl-8.1.tar.xz"],
+            "sha256": "28268bf402f1083833ea269331587f60a242848880073be8016501d864bd07a5",
+            "strip_prefix": "ffmpeg-6.0.1-amd64-static",
+            "urls": ["https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-6.0.1-amd64-static.tar.xz"],
         },
     ),
     "golangci_lint_linux_amd64": struct(

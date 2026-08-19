@@ -36,6 +36,23 @@ def _workspace() -> Path:
     return Path(value).resolve()
 
 
+def _runfile(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    runfile_path = Path(*(part for part in path.parts if part not in {".", ".."}))
+    runfiles = os.environ.get("RUNFILES_DIR")
+    if runfiles:
+        candidate = Path(runfiles) / runfile_path
+        if candidate.exists():
+            return candidate
+    for parent in Path(__file__).resolve().parents:
+        if parent.name.endswith(".runfiles"):
+            candidate = parent / runfile_path
+            if candidate.exists():
+                return candidate
+    return path.resolve()
+
+
 def _run(command: list[str], *, cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)  # noqa: S603
 
@@ -169,7 +186,7 @@ def main() -> None:
     parser.add_argument("--uv", type=Path, required=True)
     parser.add_argument("--only", choices=("all", "docs"), default="all")
     args = parser.parse_args()
-    update_python_locks(args.uv.resolve(), _workspace(), only=args.only)
+    update_python_locks(_runfile(args.uv), _workspace(), only=args.only)
 
 
 if __name__ == "__main__":

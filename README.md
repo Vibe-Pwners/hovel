@@ -37,6 +37,15 @@ Contributors should read the
 partial-checkout behavior. The source for the book lives under
 [`docs/site/src/content/`](docs/site/src/content/).
 
+The official [Agent Integrations](docs/site/src/content/spec/agent-integrations.html)
+package Hovel skills and MCP configuration for Claude Code, Codex, and OpenCode:
+
+```sh
+hovel agent install claude
+hovel agent install codex
+hovel agent install opencode
+```
+
 ## Install
 
 The operator install is the `hovel` PyPI package. It contains the
@@ -67,35 +76,37 @@ hovel module installed   # modules whose install process completed
 
 ## Develop
 
-`Taskfile.yml` is the single entry point for building, testing, linting,
+Aspect CLI is the single entry point for building, testing, linting,
 formatting, release artifacts, and local runs. Do not call Bazel, gofmt, uv, or
 Lefthook directly.
 
 ```sh
-task --list
-task checkout:status
-task start
-task test
-task check
-task ci
+aspect help
+python3 repo-tools/tasks/checkout.py status
+aspect hovel cli
+aspect test
+aspect hovel-check
+aspect hovel-check
 ```
 
-Useful tasks:
+Useful commands:
 
-| Task | Description |
+| Command | Description |
 | --- | --- |
-| `task start` | Build and launch the interactive CLI with the dev workspace. |
-| `task mcp` | Launch the MCP agent front end for the dev workspace. |
-| `task checkout:status` | Show which repository slices are present in this checkout. |
-| `task check` | Run checks for the slices present in this checkout. |
-| `task build` | Build the core Hovel binary workspace. |
-| `task test` | Run the core Hovel binary workspace tests. |
-| `task lint` | Run core Go formatting, golangci-lint, and Gazelle checks. |
-| `task fmt` | Format wired slices: core Go/Gazelle plus Go SDK sources. |
-| `task coverage` | Run core domain and application coverage ratchets. |
-| `task ci` | Require a full checkout, then run the core, SDK, modules, and docs gates. |
-| `task docs:check` | Build and validate the hermetic Astro documentation site. |
-| `task docs:build` | Materialize the complete documentation site under `_site/`. |
+| `aspect hovel cli` | Build and launch the interactive CLI with the dev workspace. |
+| `aspect hovel mcp` | Launch the MCP agent front end for the dev workspace. |
+| `python3 repo-tools/tasks/checkout.py status` | Show which repository slices are present. |
+| `aspect hovel-check` | Run checks for the slices present in this checkout. |
+| `cd core && aspect build` | Build the core Hovel binary workspace. |
+| `cd core && aspect test` | Run the core Hovel binary workspace tests. |
+| `aspect hovel-check core` | Run core Go formatting, golangci-lint, and Gazelle checks. |
+| `aspect hovel-format` | Format wired slices: core Go/Gazelle plus Go SDK sources. |
+| `aspect test --coverage` | Run core domain and application coverage ratchets. |
+| `aspect hovel-check` | Require a full checkout, then run the core, SDK, modules, and docs gates. |
+| `aspect hovel-check docs` | Build and validate the hermetic Astro documentation site. |
+| `aspect hovel-check agent` | Validate the portable skill suite and host packages. |
+| `aspect hovel-release agent` | Build versioned Claude, Codex, and OpenCode integration archives. |
+| `aspect run //docs/tools/docs:stage_site` | Materialize the documentation site under `_site/`. |
 
 ## Repository layout
 
@@ -107,13 +118,14 @@ The repository is organized for Sapling sparse profiles:
 | `sdk/` | Python, Go, and Rust module SDKs. These are intentionally outside core so SDK work can be checked out independently. |
 | `modules/` | In-repo example modules, Squatter payload/provider code, module packaging tools, and lab helpers. |
 | `docs/` | Pages source, book content, demos, and documentation tooling. |
+| `agent/` | Canonical Hovel Agent Skills and deterministic host-package tooling. |
 | `repo-tools/` | Repository-level helpers that must remain available in sparse checkouts. |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). During sparse work, use `task check` to
+See [CONTRIBUTING.md](CONTRIBUTING.md). During sparse work, use `aspect hovel-check` to
 run the checks available in the checkout. Changes should pass the relevant
-slice checks before landing; `task ci` is the full-checkout gate for core, SDKs,
+slice checks before landing; `aspect hovel-check` is the full-checkout gate for core, SDKs,
 modules, docs, demos, and release-package smoke checks.
 
 ## License

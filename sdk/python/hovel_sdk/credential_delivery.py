@@ -1117,11 +1117,9 @@ def _validate_sha256(value: str, label: str) -> None:
     if not isinstance(value, str) or len(value) != _SHA256_HEX_BYTES or value != value.lower():
         raise ValueError(f"{label} sha256 is invalid or noncanonical")
     try:
-        decoded = bytes.fromhex(value)
+        bytes.fromhex(value)
     except ValueError as error:
         raise ValueError(f"{label} sha256 is invalid or noncanonical") from error
-    if len(decoded) != _SHA256_BYTES:
-        raise ValueError(f"{label} sha256 is invalid or noncanonical")
 
 
 def _parse_canonical_uint64(value: str, label: str) -> int:

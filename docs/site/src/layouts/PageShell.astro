@@ -18,7 +18,7 @@ const { area, current, description, root, scripts = [], stylesheets = [], tag, t
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class:list={{ "home-page": area === "home", "report-page": area === "reports" }}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -29,9 +29,11 @@ const { area, current, description, root, scripts = [], stylesheets = [], tag, t
     {stylesheets.map((href) => <link rel="stylesheet" href={href} />)}
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <SiteHeader current={current} root={root} tag={tag} />
     <slot />
     <SiteFooter area={area} root={root} />
     {scripts.map((src) => <script is:inline src={src}></script>)}
+    <script is:inline src={`${root}assets/site-refresh.js`}></script>
   </body>
 </html>

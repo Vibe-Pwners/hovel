@@ -114,22 +114,22 @@ class TestPicblobsCliPackaging:
 
 
 class TestRepoTooling:
-    def test_setup_delegates_to_task(self) -> None:
+    def test_setup_delegates_to_aspect(self) -> None:
         sourceme = (REPO_ROOT / "sourceme").read_text()
-        assert "task setup" in sourceme
+        assert "aspect run //modules/picblobs/tools:generate_check" in sourceme
         assert "python/.venv" not in sourceme
 
-        taskfile = (REPO_ROOT / "Taskfile.yml").read_text()
-        assert "picblobs:generate-check" in taskfile
+        aspect_config = (REPO_ROOT.parent.parent / ".aspect" / "check.axl").read_text()
+        assert "//modules/picblobs" in aspect_config
 
     def test_lefthook_covers_repo_quality_entrypoints(self) -> None:
         content = (REPO_ROOT / "lefthook.yml").read_text()
 
         assert "pre-commit:" in content
         assert "pre-push:" in content
-        assert "task fmt" in content
-        assert "task lint" in content
-        assert "task lint:c" in content
+        assert "//modules/picblobs/tools:format_write" in content
+        assert "//modules/picblobs/tools:lint_run" in content
+        assert "--config=picblobs_lint" in content
 
     def test_fmt_uses_repo_clang_format_config(self) -> None:
         content = (REPO_ROOT / "tools" / "fmt.py").read_text()

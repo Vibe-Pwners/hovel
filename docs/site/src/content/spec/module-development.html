@@ -1,6 +1,8 @@
 <!-- hovel-doc: {"title":"Module Development","group":"Module Development","order":0,"navTitle":"Overview"} -->
 <article>
         <h1>Module Development</h1>
+
+        <p>When a survey must pass a discovered string to a later exploit in the same throw, use the fresh, atomic <a href="chain-kv.html">chain key-value handoff</a>. Hovel seals the final store as a read-only throw artifact; a later throw always starts empty.</p>
         <p>
           A <strong>module</strong> is a self-contained unit of offensive capability — a
           survey that gathers facts, an exploit that acts on a target, or a payload
@@ -151,8 +153,8 @@
           To keep a Python, Go, and Rust implementation equivalent, define the module
           contract first, then port the same contract across SDKs. The contract is the
           tuple Hovel sees over RPC: <code>handshake</code> metadata, <code>schema</code>
-          requirements, <code>execute</code> inputs and result fields, optional sessions,
-          and optional installed-payload descriptors.
+          requirements, <code>execute</code> inputs and result fields, optional chain-KV
+          requirements and outputs, optional sessions, and optional installed-payload descriptors.
         </p>
         <ol>
           <li>Choose a stable module name, version, type, summary, tags, chain config, target config, and result shape. Keep these values identical except for language suffixes when you intentionally publish side-by-side examples such as <code>mock-survey</code>, <code>mock-survey-go</code>, and <code>mock-survey-rust</code>.</li>
@@ -179,6 +181,7 @@
           <li><strong>Stdout belongs to the protocol.</strong> Never print progress, banners, debug output, or child-process output to stdout. The daemon reads stdout as framed JSON-RPC. Use the SDK logger for operator-visible logs and stderr only for crash diagnostics.</li>
           <li><strong>Metadata paths must be boring.</strong> Catalog loading calls <code>handshake</code>, <code>schema</code>, optional <code>step.describe</code>, optional <code>mesh.describe</code>, and optional <code>credential.describe</code>. Those paths must be fast, deterministic, offline, and side-effect free: no target contact, listener startup, random prepared values, payload generation, credential resolution or creation, protected-file access, or filesystem mutation.</li>
           <li><strong>Configuration is explicit.</strong> Declare every operator-controlled value as a <code>Requirement</code>. Do not read arbitrary environment variables or hidden config files for target behavior unless the value is also surfaced in the schema or returned evidence.</li>
+          <li><strong>Cross-step strings use declared chain-KV bindings.</strong> Surveys declare the keys they produce; consumers declare required keys and an optional operator configuration override. Use <code>{target}</code> for target-specific findings, resolve explicit configuration before KV data, and never assume values survive into another throw. See <a href="chain-kv.html">Chain KV Handoffs</a>.</li>
           <li><strong>Use Hovel's log rail.</strong> Logs should be structured fields, not prose blobs. Log target host, stage, protocol, handle, and provider ids as fields so transcripts are searchable.</li>
           <li><strong>Return durable state deliberately.</strong> Facts belong in <code>outputs</code>, human/audit observations in <code>findings</code>, blobs in <code>artifacts</code>, live handles in <code>sessions</code>, and target-side payload inventory only in explicit <code>installedPayloads</code> descriptors.</li>
           <li><strong>Dangerous modules self-identify.</strong> If your module can crash a host, write disk, create accounts, install payloads, bind listeners, execute commands, or maintain access, tag it <code>dangerous</code> and add the confirmation requirements the operator must satisfy.</li>
@@ -299,13 +302,13 @@ interpreters:
 hovel module install --link "$PWD/path/to/my-module-package-root"
 
 # 3. Let Hovel validate package shape and runtime metadata without executing.
-task start
+aspect hovel cli
 hovel&gt; module installed
 hovel&gt; module check &lt;your-module-id&gt;
 hovel&gt; module inspect &lt;your-module-id&gt;
 
 # 4. Run the strongest wired slice check available before calling the integration done.
-task check</code></pre>
+aspect hovel-check</code></pre>
         <p>For a private module, use <code>--link</code> while iterating and install a built <code>.tgz</code> before sharing the chain or workspace with another operator.</p>
         <figure class="demo-figure">
           <img src="../assets/demos/mock-survey-exploit-01-inspect.gif" alt="Direct terminal demo inspecting mock survey and exploit modules before running them through a configured chain.">
@@ -402,9 +405,9 @@ CHECK   NAME                         MESSAGE
             </tr>
             <tr>
               <td>payload-provider helper types</td>
-              <td>installed-payload result helpers</td>
-              <td><code>PayloadProvider</code>, step, capability, and installed-payload types</td>
-              <td>installed-payload result helpers; provider dispatch not implemented yet</td>
+              <td><code>hovel.payload/v1</code> dataclasses and installed-payload result helpers</td>
+              <td>legacy <code>PayloadProvider</code>, optional v1 interfaces, and installed-payload types</td>
+              <td><code>hovel.payload/v1</code> structs and optional trait methods plus installed-payload helpers</td>
             </tr>
             <tr>
               <td>framed RPC contract tests</td>
@@ -455,31 +458,31 @@ hovel module install --link /home/me/dev/my-module</code></pre>
 
         <h2>Building and running</h2>
         <p>
-          As with everything in this repo, go through <a href="https://taskfile.dev/">Task</a>.
+          As with everything in this repo, go through <a href="https://aspect.build/docs/cli/">Aspect CLI</a>.
           The SDK and module slices are outside the core Bazel workspace, but the root
-          Task dispatcher already wires their integration builds, tests, CI gates, and
+          Aspect commands already wire their integration builds, tests, CI gates, and
           release packaging. Link editable module package roots while iterating.
         </p>
 <pre data-lang="shell"><code># Validate SDKs and example modules from a full source checkout
-task sdk:ci
-task modules:examples:ci
-task modules:ci
+aspect hovel-check sdk
+aspect hovel-check modules
+aspect hovel-check modules
 
 # Build release module packages and indexes when you need installable archives
-task release:modules-package
+aspect hovel-release modules
 
 # Install or link module packages for the active workspace
 hovel module install --link "$PWD/path/to/module-package-root"
 
 # Launch the interactive CLI
-task start
+aspect hovel cli
 
 # In the CLI, list installed modules for the workspace
 hovel&gt; module installed</code></pre>
         <p>
-          <code>task check</code> validates every slice present in a partial checkout;
-          <code>task ci</code> requires a full checkout and runs the wired remote-compatible
-          gate. Use <code>task start</code> or <code>task daemon</code> for the Hovel process,
+          <code>aspect hovel-check</code> validates every slice present in a partial checkout;
+          <code>aspect hovel-check</code> requires a full checkout and runs the wired remote-compatible
+          gate. Use <code>aspect hovel cli</code> or <code>aspect hovel daemon</code> for the Hovel process,
           then invoke module operations through the CLI so build and runtime assumptions
           stay aligned with CI.
         </p>

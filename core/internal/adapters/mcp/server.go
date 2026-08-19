@@ -417,6 +417,7 @@ func (s *Server) RegisterTools(server *mcpsdk.Server) {
 		Description: "Compatibility alias for hovel_payload_call.",
 		Annotations: destructiveTool("Call Payload Command"),
 	}, s.payloadCommandCall)
+	s.registerGeneratedCapabilityTools(server)
 }
 
 type emptyInput struct{}
@@ -1090,6 +1091,10 @@ func (s *Server) chainApply(ctx context.Context, _ *mcpsdk.CallToolRequest, inpu
 }
 
 func (s *Server) commandRun(ctx context.Context, _ *mcpsdk.CallToolRequest, input commandRunInput) (*mcpsdk.CallToolResult, commandRunOutput, error) {
+	return s.commandRunWithPolicy(ctx, input, true)
+}
+
+func (s *Server) commandRunWithPolicy(ctx context.Context, input commandRunInput, enforceHumanOnly bool) (*mcpsdk.CallToolResult, commandRunOutput, error) {
 	if err := s.refresh(ctx); err != nil {
 		return nil, commandRunOutput{}, err
 	}
@@ -1100,7 +1105,7 @@ func (s *Server) commandRun(ctx context.Context, _ *mcpsdk.CallToolRequest, inpu
 	if len(args) == 0 {
 		return nil, commandRunOutput{}, errors.New("args are required")
 	}
-	if mcpCommandMutatesHumanOnlyPolicy(args) {
+	if enforceHumanOnly && mcpCommandMutatesHumanOnlyPolicy(args) {
 		return nil, commandRunOutput{}, errors.New("launch-key policy changes are human-only; use the CLI, not MCP")
 	}
 	input.Args = args
@@ -3035,7 +3040,7 @@ func chainOutputs(chains []operatorsession.PersistedChain) []chainOutput {
 }
 
 func defaultCapabilities() []string {
-	return []string{
+	capabilities := []string{
 		ToolOperatorIdentity,
 		ToolOperatorListEntities,
 		ToolOperationList,
@@ -3051,12 +3056,238 @@ func defaultCapabilities() []string {
 		ToolThrowConfirm,
 		ToolThrowStart,
 		ToolInstalledPayloadList,
+		ToolSessionCapabilities,
+		ToolSessionCall,
 		ToolPayloadCapabilities,
 		ToolPayloadCall,
 		ToolPayloadCmd,
 		ToolPayloadCommandList,
 		ToolPayloadCommandCall,
 	}
+	for _, route := range OperatorCapabilityRoutes() {
+		capabilities = append(capabilities, route.Tool)
+	}
+	return uniqueStrings(capabilities)
+}
+
+// OperatorCapabilityRoutes describes application capabilities with dedicated,
+// structured MCP routes. Compatibility aliases remain listed so their public
+// schemas cannot silently drift.
+func dedicatedOperatorCapabilityRoutes() []commands.AgentRoute {
+	read := commands.CapabilityRead
+	write := commands.CapabilityWrite
+	destructive := commands.CapabilityDestructive
+	return []commands.AgentRoute{
+		{Tool: ToolOperationList, Capability: "operation.list", Risk: read},
+		{Tool: ToolWorkspaceSnapshot, Capability: "operation.inspect", Risk: read},
+		{Tool: ToolWorkspaceSnapshot, Capability: "chain.list", Risk: read},
+		{Tool: ToolWorkspaceSnapshot, Capability: "chain.inspect", Risk: read},
+		{Tool: ToolModuleSearch, Capability: "module.available", Risk: read},
+		{Tool: ToolModuleInspect, Capability: "module.inspect", Risk: read},
+		{Tool: ToolLaunchKeyPolicy, Capability: "launch-key.policy.inspect", Risk: read},
+		{Tool: ToolChainApply, Capability: "operation.create", Risk: write},
+		{Tool: ToolChainApply, Capability: "operation.use", Risk: write},
+		{Tool: ToolChainApply, Capability: "chain.create", Risk: write},
+		{Tool: ToolChainApply, Capability: "chain.use", Risk: write},
+		{Tool: ToolChainApply, Capability: "chain.add", Risk: write},
+		{Tool: ToolChainApply, Capability: "chain.validate", Risk: write},
+		{Tool: ToolChainApply, Capability: "chain.config.set", Risk: write},
+		{Tool: ToolChainApply, Capability: "target.add", Risk: write},
+		{Tool: ToolChainApply, Capability: "target.config.set", Risk: write},
+		{Tool: ToolThrowPlan, Capability: "throw.plan", Risk: write},
+		{Tool: ToolThrowConfirm, Capability: "throw.confirm", Risk: write},
+		{Tool: ToolThrowStart, Capability: "throw.start", Risk: destructive, Evidence: []string{"//internal/adapters/mcp:mcp_test#TestMCPThrowStartPersistsNowBypassAuditTrail"}},
+		{Tool: ToolInstalledPayloadList, Capability: "payload.installed", Risk: read},
+		{Tool: ToolSessionCapabilities, Capability: "session.commands", Risk: read},
+		{Tool: ToolSessionCall, Capability: "session.call", Risk: destructive},
+		{Tool: ToolPayloadCapabilities, Capability: "payload.commands", Risk: read},
+		{Tool: ToolPayloadCommandList, Capability: "payload.commands", Risk: read},
+		{Tool: ToolPayloadCall, Capability: "payload.call", Risk: destructive},
+		{Tool: ToolPayloadCommandCall, Capability: "payload.call", Risk: destructive},
+		{Tool: ToolPayloadCmd, Capability: "payload.cmd", Risk: destructive},
+	}
+}
+
+func OperatorCapabilityRoutes() []commands.AgentRoute {
+	routes := dedicatedOperatorCapabilityRoutes()
+	dedicated := make(map[commands.CapabilityID]bool, len(routes))
+	for _, route := range routes {
+		dedicated[route.Capability] = true
+	}
+	capabilities, err := commands.HovelRegistry(commands.Runtime{}).OperatorCapabilities()
+	if err != nil {
+		panic(err)
+	}
+	for _, capability := range capabilities {
+		routes = append(routes, commands.AgentRoute{
+			Tool:       semanticCapabilityToolName(capability.ID, dedicated[capability.ID]),
+			Capability: capability.ID,
+			Risk:       capability.Risk,
+			Evidence:   []string{"//internal/adapters/mcp:mcp_contract_test#TestEveryOperatorCapabilityHasEquivalentHumanAndAgentInvocation"},
+		})
+	}
+	return routes
+}
+
+func (s *Server) registerGeneratedCapabilityTools(server *mcpsdk.Server) {
+	routes := dedicatedOperatorCapabilityRoutes()
+	dedicated := make(map[commands.CapabilityID]bool, len(routes))
+	for _, route := range routes {
+		dedicated[route.Capability] = true
+	}
+	registry := commands.HovelRegistry(commands.Runtime{})
+	capabilities, err := registry.OperatorCapabilities()
+	if err != nil {
+		panic(err)
+	}
+	byID := make(map[commands.CapabilityID]commands.OperatorCapability, len(capabilities))
+	for _, capability := range capabilities {
+		byID[capability.ID] = capability
+	}
+	for _, definition := range registry.Definitions() {
+		capability := byID[commands.CapabilityIDForPath(definition.Path)]
+		annotations := destructiveTool(definition.Summary)
+		if capability.Risk == commands.CapabilityRead {
+			annotations = readOnlyTool(definition.Summary)
+		}
+		definition := definition
+		mcpsdk.AddTool(server, &mcpsdk.Tool{
+			Name:         semanticCapabilityToolName(capability.ID, dedicated[capability.ID]),
+			Title:        definition.Summary,
+			Description:  definition.Summary + " This typed route uses the shared Hovel command registry and daemon-backed operator session.",
+			Annotations:  annotations,
+			InputSchema:  commandCapabilityInputSchema(definition),
+			OutputSchema: commandRunOutputSchema(),
+		}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, input map[string]any) (*mcpsdk.CallToolResult, commandRunOutput, error) {
+			args, err := commandCapabilityArgs(definition, input)
+			if err != nil {
+				return nil, commandRunOutput{}, err
+			}
+			return s.commandRunWithPolicy(ctx, commandRunInput{Args: args}, false)
+		})
+	}
+}
+
+func capabilityToolName(id commands.CapabilityID) string {
+	return "hovel_" + strings.NewReplacer(".", "_", "-", "_").Replace(string(id))
+}
+
+// semanticCapabilityToolName preserves the original generated tool names and
+// gives capabilities with a hand-designed tool an additional command-specific
+// route. The latter is intentionally separate: it provides a uniform,
+// executable semantic contract without weakening the richer tool's schema.
+func semanticCapabilityToolName(id commands.CapabilityID, hasDedicatedRoute bool) string {
+	if hasDedicatedRoute {
+		return "hovel_command_" + strings.NewReplacer(".", "_", "-", "_").Replace(string(id))
+	}
+	return capabilityToolName(id)
+}
+
+func commandCapabilityInputSchema(definition commands.Definition) map[string]any {
+	properties := map[string]any{}
+	var required []string
+	for _, positional := range definition.Positionals {
+		properties[positional.Name] = map[string]any{"type": "string", "description": positional.Help}
+		if positional.Required {
+			required = append(required, positional.Name)
+		}
+	}
+	for _, option := range definition.Options {
+		property := map[string]any{"description": option.Help}
+		switch option.Kind {
+		case commands.OptionBool:
+			property["type"] = "boolean"
+		case commands.OptionStringList:
+			property["type"] = "array"
+			property["items"] = map[string]any{"type": "string"}
+		default:
+			property["type"] = "string"
+		}
+		properties[option.Name] = property
+		if option.Required {
+			required = append(required, option.Name)
+		}
+	}
+	if definition.Passthrough.Name != "" {
+		properties[definition.Passthrough.Name] = map[string]any{
+			"type": "array", "items": map[string]any{"type": "string"}, "description": definition.Passthrough.Help,
+		}
+		if definition.Passthrough.Required {
+			required = append(required, definition.Passthrough.Name)
+		}
+	}
+	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
+func commandCapabilityArgs(definition commands.Definition, input map[string]any) ([]string, error) {
+	args := append([]string(nil), definition.Path...)
+	for _, positional := range definition.Positionals {
+		value, ok := input[positional.Name]
+		if !ok {
+			continue
+		}
+		text, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s must be a string", positional.Name)
+		}
+		args = append(args, text)
+	}
+	for _, option := range definition.Options {
+		value, ok := input[option.Name]
+		if !ok {
+			continue
+		}
+		flag := "--" + option.Name
+		switch option.Kind {
+		case commands.OptionBool:
+			enabled, ok := value.(bool)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a boolean", option.Name)
+			}
+			if enabled {
+				args = append(args, flag)
+			}
+		case commands.OptionStringList:
+			values, ok := value.([]any)
+			if !ok {
+				return nil, fmt.Errorf("%s must be an array", option.Name)
+			}
+			for _, item := range values {
+				text, ok := item.(string)
+				if !ok {
+					return nil, fmt.Errorf("%s values must be strings", option.Name)
+				}
+				args = append(args, flag, text)
+			}
+		default:
+			text, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a string", option.Name)
+			}
+			args = append(args, flag, text)
+		}
+	}
+	if definition.Passthrough.Name != "" {
+		if value, ok := input[definition.Passthrough.Name]; ok {
+			values, ok := value.([]any)
+			if !ok {
+				return nil, fmt.Errorf("%s must be an array", definition.Passthrough.Name)
+			}
+			args = append(args, "--")
+			for _, item := range values {
+				text, ok := item.(string)
+				if !ok {
+					return nil, fmt.Errorf("%s values must be strings", definition.Passthrough.Name)
+				}
+				args = append(args, text)
+			}
+		}
+	}
+	return args, nil
 }
 
 func readOnlyTool(title string) *mcpsdk.ToolAnnotations {

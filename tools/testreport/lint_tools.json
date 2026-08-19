@@ -6,9 +6,10 @@
       "name": "gofmt",
       "kind": "formatter",
       "scope": "Core and Squatter Go",
+      "cwd": "core",
       "commands": [
-        ["task", "-d", "core", "gofmt:check"],
-        ["task", "modules:fmt-check"]
+        ["aspect", "run", "//tools/lint:gofmt_workspace", "--", "--mode=check"],
+        ["aspect", "run", "//tools/lint:gofmt_workspace", "--", "--mode=check", "--path", "../modules/squatter"]
       ],
       "ignore": {"pattern": "", "extensions": [".go"]}
     },
@@ -17,7 +18,8 @@
       "name": "golangci-lint",
       "kind": "linter",
       "scope": "Core Go",
-      "commands": [["task", "-d", "core", "go:lint"]],
+      "cwd": "core",
+      "commands": [["aspect", "run", "//tools/lint:golangci_lint_workspace"]],
       "ignore": {"pattern": "//\\s*nolint(?:\\b|:)", "extensions": [".go"]}
     },
     {
@@ -25,7 +27,8 @@
       "name": "Gazelle",
       "kind": "static-analysis",
       "scope": "Core Go build metadata",
-      "commands": [["task", "-d", "core", "gazelle:check"]],
+      "cwd": "core",
+      "commands": [["aspect", "run", "//:gazelle", "--", "-mode=diff"]],
       "ignore": {
         "pattern": "#\\s*gazelle:(?:exclude|ignore)\\b",
         "extensions": [".bzl"],
@@ -37,7 +40,8 @@
       "name": "nogo nilness",
       "kind": "static-analysis",
       "scope": "Core Go build",
-      "commands": [["task", "core:build", "--", "//:build"]],
+      "cwd": "core",
+      "commands": [["aspect", "build", "//:build"]],
       "ignore": {
         "pattern": "//\\s*nolint(?=\\s|$|(?::[^\\n]*\\bnilness\\b))",
         "extensions": [".go"]
@@ -48,7 +52,7 @@
       "name": "Buildifier",
       "kind": "linter",
       "scope": "Monorepo Bazel and Starlark",
-      "commands": [["task", "buildifier:check"]],
+      "commands": [["aspect", "run", "//tools/bazel/buildifier:buildifier", "--", "--mode=check"]],
       "ignore": {
         "pattern": "#\\s*buildifier:\\s*(?:disable|leave-alone)\\b",
         "extensions": [".bzl"],
@@ -60,7 +64,7 @@
       "name": "Repository policy",
       "kind": "static-analysis",
       "scope": "Architecture, visibility, and ownership",
-      "commands": [["task", "policy:check"]],
+      "commands": [["aspect", "run", "//tools/bazel/policy:repo_policy"]],
       "ignore": {"pattern": "", "extensions": [".go", ".py", ".bzl"]}
     },
     {
@@ -68,9 +72,10 @@
       "name": "Ruff",
       "kind": "linter",
       "scope": "SDK, examples, and Picblobs Python",
+      "command_cwds": ["core", "."],
       "commands": [
-        ["task", "run", "--", "//tools/lint:python_check", "--", "--only=ruff"],
-        ["task", "picblobs:lint", "--", "--tool=ruff"]
+        ["aspect", "run", "//tools/lint:python_check", "--", "--only=ruff"],
+        ["aspect", "run", "//modules/picblobs/tools:lint_run", "--", "--tool=ruff"]
       ],
       "ignore": {"pattern": "#\\s*(?:ruff:\\s*)?noqa\\b", "extensions": [".py", ".pyi"]}
     },
@@ -79,7 +84,8 @@
       "name": "mypy",
       "kind": "static-analysis",
       "scope": "SDK and example Python",
-      "commands": [["task", "run", "--", "//tools/lint:python_check", "--", "--only=mypy"]],
+      "cwd": "core",
+      "commands": [["aspect", "run", "//tools/lint:python_check", "--", "--only=mypy"]],
       "ignore": {"pattern": "#\\s*type:\\s*ignore\\b", "extensions": [".py", ".pyi"]}
     },
     {
@@ -87,7 +93,8 @@
       "name": "pydoclint",
       "kind": "linter",
       "scope": "SDK and example Python documentation",
-      "commands": [["task", "run", "--", "//tools/lint:python_check", "--", "--only=pydoclint"]],
+      "cwd": "core",
+      "commands": [["aspect", "run", "//tools/lint:python_check", "--", "--only=pydoclint"]],
       "ignore": {"pattern": "#\\s*noqa:\\s*DOC[0-9]", "extensions": [".py", ".pyi"]}
     },
     {
@@ -95,7 +102,8 @@
       "name": "rustfmt",
       "kind": "formatter",
       "scope": "Rust SDK",
-      "commands": [["task", "run", "--", "//tools/lint:format_rust_workspace", "--", "--mode=check"]],
+      "cwd": "core",
+      "commands": [["aspect", "run", "//tools/lint:format_rust_workspace", "--", "--mode=check"]],
       "ignore": {"pattern": "#\\s*\\[(?:rustfmt::skip|rustfmt_skip)\\]", "extensions": [".rs"]}
     },
     {
@@ -104,8 +112,8 @@
       "kind": "formatter",
       "scope": "Squatter and Picblobs C",
       "commands": [
-        ["task", "bazel:build", "--", "//modules/squatter/windows/src:format_check"],
-        ["task", "bazel:run", "--", "//modules/picblobs/tools:format_check_run", "--", "--tool=clang-format"]
+        ["aspect", "build", "//modules/squatter/windows/src:format_check"],
+        ["aspect", "run", "//modules/picblobs/tools:format_check_run", "--", "--tool=clang-format"]
       ],
       "ignore": {"pattern": "clang-format\\s+off", "extensions": [".c", ".h", ".cc", ".cpp", ".hpp"]}
     },
@@ -115,8 +123,8 @@
       "kind": "static-analysis",
       "scope": "Squatter and Picblobs C",
       "commands": [
-        ["task", "bazel:build", "--", "//modules/squatter/windows/src:clang_tidy"],
-        ["task", "bazel:build", "--", "--config=picblobs_lint", "//modules/picblobs/src/...", "//modules/picblobs/tests/..."]
+        ["aspect", "build", "//modules/squatter/windows/src:clang_tidy"],
+        ["aspect", "build", "--bazel-flag=--config=picblobs_lint", "//modules/picblobs/src/...", "//modules/picblobs/tests/..."]
       ],
       "ignore": {"pattern": "(?:^|\\s)(?://|/\\*)\\s*NOLINT(?:NEXTLINE|BEGIN|END)?(?:\\([^)]*\\))?", "extensions": [".c", ".h", ".cc", ".cpp", ".hpp"]}
     },
@@ -126,8 +134,8 @@
       "kind": "static-analysis",
       "scope": "Squatter and Picblobs C",
       "commands": [
-        ["task", "bazel:build", "--", "//modules/squatter/windows/src:cppcheck"],
-        ["task", "bazel:test", "--", "--test_strategy=standalone", "--nocache_test_results", "//modules/picblobs/tests/runners/freebsd:runner_cppcheck", "//modules/picblobs/tests/runners/linux:runner_cppcheck", "//modules/picblobs/tests/runners/windows:runner_cppcheck"]
+        ["aspect", "build", "//modules/squatter/windows/src:cppcheck"],
+        ["aspect", "test", "--bazel-flag=--test_strategy=standalone", "--bazel-flag=--nocache_test_results", "//modules/picblobs/tests/runners/freebsd:runner_cppcheck", "//modules/picblobs/tests/runners/linux:runner_cppcheck", "//modules/picblobs/tests/runners/windows:runner_cppcheck"]
       ],
       "ignore": {"pattern": "cppcheck-suppress(?:-begin|-end)?\\b", "extensions": [".c", ".h", ".cc", ".cpp", ".hpp"]}
     },
@@ -137,8 +145,8 @@
       "kind": "static-analysis",
       "scope": "Squatter C and Picblobs sources",
       "commands": [
-        ["task", "bazel:build", "--", "//modules/squatter/windows/src:complexity"],
-        ["task", "picblobs:lint", "--", "--tool=lizard"]
+        ["aspect", "build", "//modules/squatter/windows/src:complexity"],
+        ["aspect", "run", "//modules/picblobs/tools:lint_run", "--", "--tool=lizard"]
       ],
       "ignore": {"pattern": "#lizard\\s+forgive\\b", "extensions": [".c", ".h", ".cc", ".cpp", ".hpp", ".py"]}
     }

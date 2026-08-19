@@ -20,6 +20,11 @@ use crate::mesh::{
     MESH_RPC_OPEN_STREAM_METHOD, MESH_RPC_TASK_METHOD, MESH_RPC_TOPOLOGY_METHOD,
 };
 use crate::module::Module;
+use crate::payload::{
+    PAYLOAD_RPC_ARTIFACT_READ_METHOD, PAYLOAD_RPC_CLEANUP_METHOD, PAYLOAD_RPC_CONNECT_METHOD,
+    PAYLOAD_RPC_DESCRIBE_METHOD, PAYLOAD_RPC_GENERATE_METHOD, PAYLOAD_RPC_INSPECT_METHOD,
+    PAYLOAD_RPC_LISTENER_PREPARE_METHOD, PAYLOAD_RPC_RESOLVE_METHOD,
+};
 
 /// Runs `module` over stdin/stdout until the daemon sends "shutdown" or the
 /// stream closes. This is the entry point for every Rust module's `main`:
@@ -121,6 +126,14 @@ fn dispatch(
         CREDENTIAL_RPC_FILES_METHOD => credential_files(module, params),
         CREDENTIAL_RPC_ENCODE_METHOD => credential_encode(module, params),
         CREDENTIAL_RPC_STAMP_METHOD => credential_stamp(module, params),
+        PAYLOAD_RPC_DESCRIBE_METHOD => Ok(module.describe_payloads()?.to_value()),
+        PAYLOAD_RPC_RESOLVE_METHOD => Ok(module.resolve_payload_v1(params.clone())?.to_value()),
+        PAYLOAD_RPC_GENERATE_METHOD => Ok(module.generate_payload_v1(params.clone())?.to_value()),
+        PAYLOAD_RPC_ARTIFACT_READ_METHOD => module.read_payload_artifact(params.clone()),
+        PAYLOAD_RPC_LISTENER_PREPARE_METHOD => module.prepare_payload_listener(params.clone()),
+        PAYLOAD_RPC_CONNECT_METHOD => module.connect_payload(params.clone()),
+        PAYLOAD_RPC_INSPECT_METHOD => module.inspect_payload(params.clone()),
+        PAYLOAD_RPC_CLEANUP_METHOD => module.cleanup_installed_payload(params.clone()),
         "execute" => Ok(execute(module, emitter, params)),
         "session/write" => session_write(emitter, params),
         "session/read" => session_read(emitter, params),
@@ -174,6 +187,9 @@ fn schema(module: &dyn Module) -> Value {
     if !schema.planning_context.is_empty() {
         pairs.push(("planningContext", Value::Object(schema.planning_context)));
     }
+    if let Some(contract) = module.chain_kv_contract() {
+        pairs.push(("chainKV", contract.to_value()));
+    }
     Value::object(pairs)
 }
 
@@ -183,12 +199,20 @@ fn execute(module: &dyn Module, emitter: &mut Emitter, params: &Value) -> Value 
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let outcome = {
+    let (outcome, mutations) = {
         let mut ctx = Context::new(emitter, &module.info().name, params);
-        module.run(&mut ctx)
+        let outcome = module.run(&mut ctx);
+        let mutations = ctx.chain_kv.mutations();
+        (outcome, mutations)
     };
     let refs = emitter.refs_for_run(&run_id);
-    outcome.to_value(refs)
+    let mut response = outcome.to_value(refs);
+    if let Some(mutations) = mutations {
+        if let Value::Object(members) = &mut response {
+            members.push(("chainKVMutations".to_string(), mutations));
+        }
+    }
+    response
 }
 
 fn module_id(module: &dyn Module) -> String {
@@ -380,4 +404,84 @@ fn session_close(emitter: &mut Emitter, params: &Value) -> Result<Value, String>
         .session_close(id, reason)
         .map_err(|e| e.to_string())?;
     Ok(Value::object(vec![("status", Value::from("ok"))]))
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use crate::{Context, Info, ModuleType, Outcome, Schema};
+
+    struct MetadataModule;
+    impl Module for MetadataModule {
+        fn info(&self) -> Info {
+            Info {
+                name: "module".into(),
+                version: "v1".into(),
+                module_type: ModuleType::Survey,
+                summary: String::new(),
+                description: String::new(),
+                tags: Vec::new(),
+                discovery_context: vec![("summary".into(), Value::from("context"))],
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema {
+                planning_context: vec![("summary".into(), Value::from("plan"))],
+                ..Schema::default()
+            }
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    struct MissingNameModule;
+    impl Module for MissingNameModule {
+        fn info(&self) -> Info {
+            Info {
+                name: String::new(),
+                ..MetadataModule.info()
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema::default()
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    struct VersionlessModule;
+    impl Module for VersionlessModule {
+        fn info(&self) -> Info {
+            Info {
+                version: String::new(),
+                discovery_context: Vec::new(),
+                ..MetadataModule.info()
+            }
+        }
+        fn schema(&self) -> Schema {
+            Schema::default()
+        }
+        fn run(&self, _: &mut Context) -> Outcome {
+            Outcome::ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn metadata_and_listener_validation_residual_branches() {
+        assert!(handshake(&MissingNameModule).is_err());
+        assert!(handshake(&MetadataModule).is_ok());
+        assert!(schema(&MetadataModule).get("planningContext").is_some());
+        assert_eq!(module_id(&VersionlessModule), "module");
+        assert!(mesh_listener_lifecycle_value("id", MeshListener::default()).is_err());
+        assert!(mesh_listener_lifecycle_value(
+            "id",
+            MeshListener {
+                id: "other".into(),
+                ..MeshListener::default()
+            }
+        )
+        .is_err());
+    }
 }

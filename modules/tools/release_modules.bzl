@@ -18,7 +18,7 @@ MODULE_HOSTS = [
         exe = "",
         key = "linux_arm64",
         os = "linux",
-        platform = "//platforms:linux_aarch64_musl",
+        platform = "//platforms:linux_aarch64",
         suffix = "release-linux-arm64",
     ),
     struct(

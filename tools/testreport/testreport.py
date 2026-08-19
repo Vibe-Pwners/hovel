@@ -47,6 +47,9 @@ class TestTarget:
 class CoverageMetric:
     name: str
     scope: str
+    metric_type: str
+    language: str
+    platforms: list[str]
     covered: int
     total: int
     percentage: float
@@ -99,6 +102,7 @@ class TestReport:
     totals: dict[str, Any]
     linters: list[LintTool]
     coverage: list[CoverageMetric]
+    operator_parity: dict[str, Any] | None
     jobs: list[TestJob]
     targets: list[TestTarget]
 
@@ -118,6 +122,7 @@ def build_report(
     coverage_lcov_files: list[tuple[str, Path, float]] | None = None,
     job_summary_files: list[Path] | None = None,
     lint_report_files: list[Path] | None = None,
+    operator_parity_files: list[Path] | None = None,
 ) -> TestReport:
     targets: dict[str, TestTarget] = {}
     for bep in bep_files:
@@ -134,6 +139,7 @@ def build_report(
     coverage = ingest_coverage(coverage_json_files or [], coverage_lcov_files or [], repo)
     jobs = ingest_jobs(job_summary_files or [], repo, coverage)
     linters = ingest_linters(lint_report_files or [])
+    operator_parity = ingest_operator_parity(operator_parity_files or [])
     return TestReport(
         title=title,
         generated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -144,9 +150,31 @@ def build_report(
         totals=totals,
         linters=linters,
         coverage=coverage,
+        operator_parity=operator_parity,
         jobs=jobs,
         targets=ordered,
     )
+
+
+def ingest_operator_parity(files: list[Path]) -> dict[str, Any] | None:
+    reports: list[dict[str, Any]] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict) or raw.get("schemaVersion") != "hovel.operator-parity/v1":
+            raise ValueError(f"unsupported operator parity schema: {path}")
+        totals = raw.get("totals")
+        capabilities = raw.get("capabilities")
+        if not isinstance(totals, dict) or not isinstance(capabilities, list):
+            raise ValueError(f"invalid operator parity report: {path}")
+        for capability in capabilities:
+            if not isinstance(capability, dict) or not capability.get("id") or not capability.get("humanRoutes"):
+                raise ValueError(f"invalid operator parity capability: {path}")
+        reports.append(raw)
+    if len(reports) > 1:
+        raise ValueError("only one operator parity report may be ingested")
+    return reports[0] if reports else None
 
 
 def ingest_linters(files: list[Path]) -> list[LintTool]:
@@ -225,6 +253,9 @@ def ingest_coverage(
                 new_coverage_metric(
                     name=str(item.get("name", "coverage")),
                     scope=scope,
+                    metric_type=str(item.get("metric_type", "line")),
+                    language=str(item.get("language", "")),
+                    platforms=string_list(item.get("platforms", []), path, "coverage platforms"),
                     covered=int(item.get("covered", 0)),
                     total=int(item.get("total", 0)),
                     minimum=float(item.get("minimum", 0.0)),
@@ -240,6 +271,9 @@ def ingest_coverage(
             new_coverage_metric(
                 name=name,
                 scope="Modules",
+                metric_type="line",
+                language="go",
+                platforms=[],
                 covered=covered,
                 total=total,
                 minimum=minimum,
@@ -275,6 +309,9 @@ def ingest_jobs(files: list[Path], repo: Path, coverage: list[CoverageMetric]) -
                 new_coverage_metric(
                     name=str(item.get("name", "feature matrix")),
                     scope="E2E",
+                    metric_type=str(item.get("metric_type", "feature")),
+                    language=str(item.get("language", "")),
+                    platforms=string_list(item.get("platforms", []), path, "coverage platforms"),
                     covered=int(item.get("covered", 0)),
                     total=int(item.get("total", 0)),
                     minimum=float(item.get("minimum", 0.0)),
@@ -287,12 +324,27 @@ def ingest_jobs(files: list[Path], repo: Path, coverage: list[CoverageMetric]) -
 
 
 def new_coverage_metric(
-    *, name: str, scope: str, covered: int, total: int, minimum: float, source: Path, repo: Path
+    *,
+    name: str,
+    scope: str,
+    metric_type: str,
+    language: str,
+    platforms: list[str],
+    covered: int,
+    total: int,
+    minimum: float,
+    source: Path,
+    repo: Path,
 ) -> CoverageMetric:
+    if metric_type not in {"line", "branch", "condition", "feature"}:
+        raise ValueError(f"invalid coverage metric type {metric_type!r}: {source}")
     percentage = round((100.0 * covered / total) if total else 0.0, 2)
     return CoverageMetric(
         name=name,
         scope=scope,
+        metric_type=metric_type,
+        language=language,
+        platforms=platforms,
         covered=covered,
         total=total,
         percentage=percentage,
@@ -300,6 +352,12 @@ def new_coverage_metric(
         status="PASSED" if total > 0 and percentage >= minimum else "FAILED",
         raw_source_path=display_path(repo, source),
     )
+
+
+def string_list(value: Any, source: Path, description: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ValueError(f"{description} must be a list of non-empty strings: {source}")
+    return value
 
 
 def lcov_totals(report: str) -> tuple[int, int]:

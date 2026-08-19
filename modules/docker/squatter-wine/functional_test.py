@@ -58,6 +58,30 @@ SERVICE_DESCRIPTIONS = {
 }
 
 
+def resolve_runfile(path: pathlib.Path) -> pathlib.Path:
+    """Resolve a rootpath argument in both Bazel and workspace execution."""
+    if path.is_file() or path.is_absolute():
+        return path
+
+    roots = [
+        pathlib.Path(value)
+        for name in ("RUNFILES_DIR", "TEST_SRCDIR")
+        if (value := os.environ.get(name))
+    ]
+    workspaces = tuple(
+        dict.fromkeys(
+            value
+            for value in (os.environ.get("TEST_WORKSPACE"), "_main")
+            if value
+        )
+    )
+    for root in roots:
+        for candidate in (root / path, *(root / workspace / path for workspace in workspaces)):
+            if candidate.is_file():
+                return candidate
+    return path
+
+
 @dataclass(frozen=True)
 class TestCaseResult:
     name: str
@@ -455,6 +479,18 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    for name in (
+        "dockerfile",
+        "entrypoint",
+        "functest",
+        "provider_functest",
+        "payload32",
+        "payload64",
+        "pipeprobe32",
+        "pipeprobe64",
+        "module_surface",
+    ):
+        setattr(args, name, resolve_runfile(getattr(args, name)))
     workspace = pathlib.Path(
         os.environ.get("BUILD_WORKSPACE_DIRECTORY", pathlib.Path.cwd())
     )

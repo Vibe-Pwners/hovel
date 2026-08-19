@@ -35,6 +35,10 @@
               <td>Replayable execution of a reviewed chain against selected targets.</td>
             </tr>
             <tr>
+              <td><code>chain KV</code></td>
+              <td>Fresh, throw-local string handoff used by ordered modules. It is mutable only during that throw and becomes a read-only <code>chain-kv.json</code> artifact afterward.</td>
+            </tr>
+            <tr>
               <td><code>session</code></td>
               <td>Live post-exploitation stream owned by the daemon and reached through <code>session</code> commands.</td>
             </tr>
@@ -99,16 +103,16 @@ modules:
         </figure>
 
         <h2>Start Hovel From Source</h2>
-        <p>All build, test, run, and docs commands go through Task. The developer workspace defaults to <code>./.hovel</code>; set <code>HOVEL_WORKSPACE</code> when you want a separate local workspace.</p>
+        <p>All build, test, run, and docs commands go through Aspect CLI. The developer workspace defaults to <code>./.hovel</code>; set <code>HOVEL_WORKSPACE</code> when you want a separate local workspace.</p>
 <pre data-lang="shell"><code># Build staged example modules and launch the interactive CLI.
-task start
+aspect hovel cli
 
 # Inspect daemon state for the current dev workspace.
-task status
+aspect hovel status
 
 # Wipe local state and relaunch from a clean workspace.
-task reset</code></pre>
-        <p><code>task start</code> launches <code>hovel cli</code> and auto-starts or attaches to a local daemon for the workspace. The daemon owns module processes, throw plans, confirmation records, artifacts, installed payload inventory, logs, and sessions.</p>
+aspect hovel init</code></pre>
+        <p><code>aspect hovel cli</code> launches <code>hovel cli</code> and auto-starts or attaches to a local daemon for the workspace. The daemon owns module processes, throw plans, confirmation records, artifacts, installed payload inventory, logs, and sessions.</p>
 
         <div class="demo-series">
           <figure class="demo-figure">
@@ -123,7 +127,7 @@ task reset</code></pre>
 
         <h2>Throw A Saved Chain</h2>
         <p>One-shot mode is for scripts, CI, demos, and operators who want to execute a durable configured chain file without entering the prompt. It loads the chain file, creates the same review surface as interactive execution, records a confirmation, runs the modules, persists events, and exits.</p>
-<pre data-lang="shell"><code>task run -- //cmd/hovel -- throw demo/chains/mock-survey-exploit.chain.yaml --now</code></pre>
+<pre data-lang="shell"><code>aspect hovel throw -- demo/chains/mock-survey-exploit.chain.yaml --now</code></pre>
         <p><code>--now</code> skips the typed <code>yes</code> prompt, but it is still an explicit recorded confirmation bypass. It does not skip planning, validation, guardrails, event recording, artifacts, or throw records.</p>
 
         <div class="demo-series">
@@ -177,7 +181,7 @@ h0v3l [demo/mock-survey-exploit] &gt; chain validate</code></pre>
         <p><code>review</code>, <code>confirm</code>, and <code>throw</code> share the same planning path. <code>review</code> displays the plan and records a typed confirmation without execution. <code>confirm</code> records pre-confirmation and stops. <code>throw</code> starts execution after an existing confirmation, an inline typed <code>yes</code>, or an explicit <code>--now</code> bypass.</p>
 <pre data-lang="cli"><code>h0v3l [demo/mock-survey-exploit] &gt; review
 h0v3l [demo/mock-survey-exploit] &gt; throw</code></pre>
-        <p>A confirmation is tied to the reviewed plan. Changing steps, targets, or configuration changes the plan hash and requires another review.</p>
+        <p>A confirmation is tied to the reviewed plan. Changing steps, targets, configuration, or planned chain-KV bindings changes the plan hash and requires another review. A required dynamic binding means an earlier module must produce that key during this throw; Hovel never reuses a prior throw's snapshot.</p>
 
         <h2>Inspect Results</h2>
         <p>After a throw, inspect the durable records instead of treating terminal text as the source of truth.</p>
@@ -185,7 +189,8 @@ h0v3l [demo/mock-survey-exploit] &gt; throw</code></pre>
 h0v3l [demo/mock-survey-exploit] &gt; throw inspect &lt;throw-id&gt;
 h0v3l [demo/mock-survey-exploit] &gt; artifact list
 h0v3l [demo/mock-survey-exploit] &gt; artifact inspect &lt;artifact-id&gt;</code></pre>
-        <p>Use an artifact-producing mock exploit chain when demonstrating artifacts. The session-oriented mock exploit is better for session videos; the non-session mock exploit is better for findings and artifact inventory.</p>
+        <p>Every throw using the chain-KV runtime records a <code>chain-kv.json</code> artifact containing the final revision and string entries. It is read-only evidence: inspect it through the ordinary artifact commands, and start another throw to obtain a fresh empty store. The mock survey/exploit pair demonstrates this by publishing <code>survey/{target}/port</code> and reporting whether the exploit used explicit config or the surveyed value.</p>
+        <p>Use an artifact-producing mock exploit chain when demonstrating artifacts. The session-oriented mock exploit is better for session videos; the non-session mock exploit is better for findings, the KV handoff, and artifact inventory. See <a href="chain-kv.html">Chain KV Handoffs</a> for naming, limits, and module APIs.</p>
 
         <div class="demo-series">
           <figure class="demo-figure">

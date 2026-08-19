@@ -1,5 +1,6 @@
 //! The module contract: metadata, configuration schema, and the [`Module`] trait.
 
+use crate::chain_kv::ChainKVContract;
 use crate::context::Context;
 use crate::credential_delivery::CredentialDeliveryDescriptor;
 use crate::credential_provider::{
@@ -16,6 +17,7 @@ use crate::mesh::{
     MESH_RPC_LISTENERS_METHOD, MESH_RPC_LISTENER_START_METHOD, MESH_RPC_LISTENER_STOP_METHOD,
     MESH_RPC_OPEN_STREAM_METHOD, MESH_RPC_TASK_METHOD, MESH_RPC_TOPOLOGY_METHOD,
 };
+use crate::payload::{PayloadArtifactV1, PayloadProviderDescriptor, PayloadVariant};
 use crate::result::Outcome;
 use crate::session::SessionRef;
 
@@ -111,6 +113,66 @@ pub trait Module {
     fn info(&self) -> Info;
     fn schema(&self) -> Schema;
     fn run(&self, ctx: &mut Context) -> Outcome;
+
+    fn chain_kv_contract(&self) -> Option<ChainKVContract> {
+        None
+    }
+
+    fn describe_payloads(&self) -> Result<PayloadProviderDescriptor, String> {
+        Err(format!(
+            "module {:?} is not a payload provider",
+            self.info().name
+        ))
+    }
+
+    fn resolve_payload_v1(&self, _req: Value) -> Result<PayloadVariant, String> {
+        Err(format!(
+            "module {:?} does not implement payload.resolve",
+            self.info().name
+        ))
+    }
+
+    fn generate_payload_v1(&self, _req: Value) -> Result<PayloadArtifactV1, String> {
+        Err(format!(
+            "module {:?} does not implement payload.generate",
+            self.info().name
+        ))
+    }
+
+    fn read_payload_artifact(&self, _req: Value) -> Result<Value, String> {
+        Err(format!(
+            "module {:?} does not implement payload.artifact.read",
+            self.info().name
+        ))
+    }
+
+    fn prepare_payload_listener(&self, _req: Value) -> Result<Value, String> {
+        Err(format!(
+            "module {:?} does not implement payload.listener.prepare",
+            self.info().name
+        ))
+    }
+
+    fn connect_payload(&self, _req: Value) -> Result<Value, String> {
+        Err(format!(
+            "module {:?} does not implement payload.connect",
+            self.info().name
+        ))
+    }
+
+    fn inspect_payload(&self, _req: Value) -> Result<Value, String> {
+        Err(format!(
+            "module {:?} does not implement payload.inspect",
+            self.info().name
+        ))
+    }
+
+    fn cleanup_installed_payload(&self, _req: Value) -> Result<Value, String> {
+        Err(format!(
+            "module {:?} does not implement payload.cleanup",
+            self.info().name
+        ))
+    }
 
     fn describe_mesh(&self, _req: MeshDescribeRequest) -> Result<MeshDescriptor, String> {
         Err(format!(

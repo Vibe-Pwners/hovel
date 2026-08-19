@@ -1112,10 +1112,7 @@ fn string_array(value: &Value, key: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        context_params, i64_field, AgentHint, MeshBeacon, MeshEvent, MeshLink, MeshRoute,
-        MeshStreamRequest, MeshTaskRequest, MeshTaskResult, MAX_MESH_PORT,
-    };
+    use super::*;
     use crate::json::Value;
 
     #[test]
@@ -1302,5 +1299,210 @@ mod tests {
     fn mesh_stream_decoder_rejects_malformed_optional_fields() {
         let invalid = Value::object(vec![("config", Value::Array(Vec::new()))]);
         assert!(MeshStreamRequest::try_from_value(&invalid).is_err());
+    }
+
+    #[test]
+    fn residual_mesh_serialization_and_parser_branches() {
+        assert_eq!(AgentEntity::from_value(None), AgentEntity::default());
+        assert_eq!(
+            AgentEntity::from_value(Some(&Value::Object(Vec::new()))),
+            AgentEntity::default()
+        );
+        assert!(AgentEntity::try_from_value(Some(&Value::Bool(false))).is_err());
+        assert!(AgentContext::from_value(None).is_none());
+        assert!(AgentContext::from_value(Some(&Value::Object(Vec::new()))).is_some());
+        assert_eq!(AgentContext::try_from_value(None).unwrap(), None);
+        assert_eq!(
+            AgentContext::try_from_value(Some(&Value::Null)).unwrap(),
+            None
+        );
+        assert!(AgentContext::try_from_value(Some(&Value::Bool(false))).is_err());
+
+        let topology = MeshTopology {
+            root: "root".into(),
+            nodes: vec![MeshNode::default()],
+            links: vec![MeshLink::default()],
+            routes: vec![MeshRoute {
+                nodes: vec!["root".into()],
+                ..MeshRoute::default()
+            }],
+            attributes: vec![("key".into(), Value::Bool(true))],
+        };
+        let descriptor = MeshDescriptor {
+            topology,
+            tasks: vec![MeshTaskSpec::default()],
+            listener_types: vec![MeshListenerSpec::default()],
+            triggers: vec![MeshTrigger::default()],
+            attributes: vec![("key".into(), Value::Bool(true))],
+            ..MeshDescriptor::default()
+        };
+        assert!(matches!(descriptor.to_value(), Value::Object(_)));
+        assert!(matches!(
+            MeshTopology::default().to_value(),
+            Value::Object(_)
+        ));
+        for topology in [
+            MeshTopology {
+                root: "root".into(),
+                ..MeshTopology::default()
+            },
+            MeshTopology {
+                nodes: vec![MeshNode::default()],
+                ..MeshTopology::default()
+            },
+            MeshTopology {
+                links: vec![MeshLink::default()],
+                ..MeshTopology::default()
+            },
+            MeshTopology {
+                routes: vec![MeshRoute::default()],
+                ..MeshTopology::default()
+            },
+            MeshTopology {
+                attributes: vec![("x".into(), Value::Null)],
+                ..MeshTopology::default()
+            },
+        ] {
+            assert!(MeshDescriptor {
+                topology,
+                ..MeshDescriptor::default()
+            }
+            .to_value()
+            .get("topology")
+            .is_some());
+        }
+        for descriptor in [
+            MeshDescriptor {
+                tasks: vec![MeshTaskSpec::default()],
+                ..MeshDescriptor::default()
+            },
+            MeshDescriptor {
+                listener_types: vec![MeshListenerSpec::default()],
+                ..MeshDescriptor::default()
+            },
+            MeshDescriptor {
+                triggers: vec![MeshTrigger::default()],
+                ..MeshDescriptor::default()
+            },
+        ] {
+            assert!(matches!(descriptor.to_value(), Value::Object(_)));
+        }
+
+        let rich_result = MeshTaskResult {
+            status: "custom".into(),
+            route: Some(MeshRoute {
+                nodes: vec!["root".into()],
+                ..MeshRoute::default()
+            }),
+            findings: vec![Finding::new("finding", "info", "detail")],
+            artifacts: vec![Artifact::inline("artifact", "text/plain", "data")],
+            sessions: vec![session_ref("explicit")],
+            beacons: vec![MeshBeacon::default()],
+            events: vec![MeshEvent::default()],
+            agent_hints: vec![AgentHint::default()],
+            ..MeshTaskResult::default()
+        };
+        let opened = vec![
+            session_ref(""),
+            session_ref("explicit"),
+            session_ref("opened"),
+        ];
+        assert!(matches!(rich_result.to_value(opened), Value::Object(_)));
+
+        let node_target = context_params(
+            "module",
+            &Value::object(vec![("nodeId", Value::from("node-1"))]),
+        );
+        assert_eq!(
+            node_target.get("target").and_then(Value::as_str),
+            Some("node-1")
+        );
+        assert!(context_params("module", &Value::Object(Vec::new()))
+            .get("target")
+            .is_none());
+
+        assert!(MeshRoute::try_from_value(&Value::Bool(false)).is_err());
+        for value in [Value::from(-1_i64), Value::from(MAX_MESH_PORT + 1)] {
+            assert!(optional_mesh_integer(
+                &Value::object(vec![("port", value)]),
+                "port",
+                MAX_MESH_PORT
+            )
+            .is_err());
+        }
+        for value in [
+            Value::from(1_i64),
+            Value::from(1.5_f64),
+            Value::from(f64::NAN),
+        ] {
+            let _ =
+                optional_mesh_integer(&Value::object(vec![("port", value)]), "port", MAX_MESH_PORT);
+        }
+        assert!(
+            optional_mesh_object(&Value::object(vec![("x", Value::Bool(false))]), "x").is_err()
+        );
+        assert!(
+            optional_mesh_string_array(&Value::object(vec![("x", Value::Bool(false))]), "x")
+                .is_err()
+        );
+        assert!(optional_mesh_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::Bool(false)]))]),
+            "x"
+        )
+        .is_err());
+        assert!(required_mesh_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::from(" ")]))]),
+            "x"
+        )
+        .is_err());
+        assert!(required_mesh_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::from("ok")]))]),
+            "x"
+        )
+        .is_ok());
+        assert!(
+            optional_agent_string(&Value::object(vec![("x", Value::Bool(false))]), "x").is_err()
+        );
+        assert!(
+            optional_agent_bool(&Value::object(vec![("x", Value::from("false"))]), "x").is_err()
+        );
+        assert!(
+            optional_agent_string_array(&Value::object(vec![("x", Value::Bool(false))]), "x")
+                .is_err()
+        );
+        assert!(optional_agent_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::Bool(false)]))]),
+            "x"
+        )
+        .is_err());
+        assert!(optional_agent_string_array(&Value::Object(Vec::new()), "x")
+            .unwrap()
+            .is_empty());
+        assert!(optional_agent_string_array(
+            &Value::object(vec![("x", Value::Array(vec![Value::from("ok")]))]),
+            "x"
+        )
+        .is_ok());
+        assert_eq!(
+            i64_field(
+                &Value::object(vec![("x", Value::from(i64::MIN as f64 - 2048.0))]),
+                "x"
+            ),
+            0
+        );
+    }
+
+    fn session_ref(id: &str) -> SessionRef {
+        SessionRef {
+            id: id.into(),
+            run_id: String::new(),
+            module_id: String::new(),
+            target: String::new(),
+            name: String::new(),
+            kind: String::new(),
+            state: String::new(),
+            transport: String::new(),
+            capabilities: Vec::new(),
+        }
     }
 }

@@ -30,6 +30,21 @@ py_library(
     imports = ["."],
 )
 
+filegroup(
+    name = "hovel_sdk_test_sources",
+    srcs = ["hovel_sdk/sdk_test.py"],
+)
+
+filegroup(
+    name = "mesh_bridge_test_sources",
+    srcs = ["hovel_sdk/mesh_bridge_test.py"],
+)
+
+filegroup(
+    name = "coverage_test_sources",
+    srcs = ["hovel_sdk/coverage_test.py"],
+)
+
 py_test(
     name = "hovel_sdk_test",
     size = "small",
@@ -49,6 +64,17 @@ py_test(
     srcs = ["hovel_sdk/mesh_bridge_test.py"],
     imports = ["."],
     python_version = "PY3",
+    deps = [
+        ":hovel_sdk",
+        "@lint_pypi//pytest",
+    ],
+)
+
+py_test(
+    name = "coverage_test",
+    size = "small",
+    srcs = ["hovel_sdk/coverage_test.py"],
+    imports = ["."],
     deps = [
         ":hovel_sdk",
         "@lint_pypi//pytest",

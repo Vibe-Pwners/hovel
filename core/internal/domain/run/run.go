@@ -28,6 +28,7 @@ type RequestArgs struct {
 	ChainConfig  map[string]string
 	TargetConfig map[string]string
 	Agent        *AgentContext
+	ChainKV      *ChainKVSnapshot
 }
 
 type Request struct {
@@ -40,6 +41,7 @@ type Request struct {
 	ChainConfig  map[string]string
 	TargetConfig map[string]string
 	Agent        *AgentContext
+	ChainKV      *ChainKVSnapshot
 }
 
 func NewRequest(args RequestArgs) (Request, error) {
@@ -65,7 +67,26 @@ func NewRequest(args RequestArgs) (Request, error) {
 		ChainConfig:  cloneStringMap(args.ChainConfig),
 		TargetConfig: cloneStringMap(args.TargetConfig),
 		Agent:        cloneAgentContext(args.Agent),
+		ChainKV:      cloneChainKVSnapshot(args.ChainKV),
 	}, nil
+}
+
+type ChainKVSnapshot struct {
+	Revision uint64            `json:"revision"`
+	Entries  map[string]string `json:"entries,omitempty"`
+}
+
+type ChainKVMutation struct {
+	Operation string `json:"operation"`
+	Key       string `json:"key"`
+	Value     string `json:"value,omitempty"`
+}
+
+func cloneChainKVSnapshot(snapshot *ChainKVSnapshot) *ChainKVSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+	return &ChainKVSnapshot{Revision: snapshot.Revision, Entries: cloneStringMap(snapshot.Entries)}
 }
 
 type AgentEntity struct {
@@ -173,27 +194,31 @@ type LogEntry struct {
 }
 
 type ResultArgs struct {
-	Summary           string
-	Findings          []Finding
-	Artifacts         []Artifact
-	Logs              []LogEntry
-	Sessions          []SessionRef
-	InstalledPayloads []InstalledPayloadDescriptor
-	AgentHints        []AgentHint
+	Summary             string
+	Findings            []Finding
+	Artifacts           []Artifact
+	Logs                []LogEntry
+	Sessions            []SessionRef
+	InstalledPayloads   []InstalledPayloadDescriptor
+	AgentHints          []AgentHint
+	ChainKVMutations    []ChainKVMutation
+	ChainKVBaseRevision uint64
 }
 
 type Result struct {
-	ID                string
-	ModuleID          string
-	Target            string
-	State             State
-	Summary           string
-	Findings          []Finding
-	Artifacts         []Artifact
-	Logs              []LogEntry
-	Sessions          []SessionRef
-	InstalledPayloads []InstalledPayloadDescriptor
-	AgentHints        []AgentHint
+	ID                  string
+	ModuleID            string
+	Target              string
+	State               State
+	Summary             string
+	Findings            []Finding
+	Artifacts           []Artifact
+	Logs                []LogEntry
+	Sessions            []SessionRef
+	InstalledPayloads   []InstalledPayloadDescriptor
+	AgentHints          []AgentHint
+	ChainKVMutations    []ChainKVMutation
+	ChainKVBaseRevision uint64
 }
 
 type PayloadProviderRecord struct {
@@ -366,7 +391,9 @@ func resultWithState(request Request, state State, args ResultArgs) (Result, err
 		InstalledPayloads: CloneInstalledPayloads(
 			args.InstalledPayloads,
 		),
-		AgentHints: cloneAgentHints(args.AgentHints),
+		AgentHints:          cloneAgentHints(args.AgentHints),
+		ChainKVMutations:    append([]ChainKVMutation(nil), args.ChainKVMutations...),
+		ChainKVBaseRevision: args.ChainKVBaseRevision,
 	}, nil
 }
 

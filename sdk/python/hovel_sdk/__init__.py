@@ -1,5 +1,5 @@
 from hovel_sdk.config import Requirement
-from hovel_sdk.context import AgentContext, AgentEntity, Context
+from hovel_sdk.context import AgentContext, AgentEntity, ChainKV, Context
 from hovel_sdk.credential_delivery import (
     CREDENTIAL_DELIVERY_SCHEMA_V1,
     CredentialBytePatternTarget,
@@ -110,6 +110,23 @@ from hovel_sdk.mesh_bridge import (
     connect_mesh_bridge,
 )
 from hovel_sdk.module import HovelModule
+from hovel_sdk.payload import (
+    PAYLOAD_SCHEMA_V1,
+    PayloadArtifactReader,
+    PayloadArtifactV1,
+    PayloadCleanupProvider,
+    PayloadConnector,
+    PayloadContent,
+    PayloadDescriber,
+    PayloadGenerator,
+    PayloadInspector,
+    PayloadListenerPreparer,
+    PayloadLoadContract,
+    PayloadProviderDescriptor,
+    PayloadResolver,
+    PayloadTarget,
+    PayloadVariant,
+)
 from hovel_sdk.result import AgentHint, Artifact, Finding, InstalledPayload, PayloadProviderRecord, Result
 from hovel_sdk.server import serve
 from hovel_sdk.session import SESSION_CAPABILITY_DATAGRAM, LineShellSession, SessionRef
@@ -140,11 +157,13 @@ __all__ = [
     "MESH_TASK_SURVEY",
     "MESH_TASK_UPLOAD",
     "MESH_TASK_UPLOAD_EXECUTE",
+    "PAYLOAD_SCHEMA_V1",
     "SESSION_CAPABILITY_DATAGRAM",
     "AgentContext",
     "AgentEntity",
     "AgentHint",
     "Artifact",
+    "ChainKV",
     "Context",
     "CredentialArtifactInput",
     "CredentialArtifactOutput",
@@ -224,7 +243,21 @@ __all__ = [
     "MeshTopologyRequest",
     "MeshTrigger",
     "ModuleRPC",
+    "PayloadArtifactReader",
+    "PayloadArtifactV1",
+    "PayloadCleanupProvider",
+    "PayloadConnector",
+    "PayloadContent",
+    "PayloadDescriber",
+    "PayloadGenerator",
+    "PayloadInspector",
+    "PayloadListenerPreparer",
+    "PayloadLoadContract",
+    "PayloadProviderDescriptor",
     "PayloadProviderRecord",
+    "PayloadResolver",
+    "PayloadTarget",
+    "PayloadVariant",
     "RPCError",
     "Requirement",
     "ResolvedCredentialMaterial",

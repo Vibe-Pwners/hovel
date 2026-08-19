@@ -9,30 +9,43 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func openPTY() (*os.File, *os.File, *os.File, error) {
-	masterFD, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY, 0)
+type ptyPlatformOps struct {
+	open      func(string, int, uint32) (int, error)
+	close     func(int) error
+	unlock    func(int) error
+	slaveName func(int) (string, error)
+}
+
+func openPTYPlatform() (*os.File, *os.File, *os.File, error) {
+	return openPTYPlatformWithOps(ptyPlatformOps{
+		open: unix.Open, close: unix.Close, unlock: unlockPTY, slaveName: ptsName,
+	})
+}
+
+func openPTYPlatformWithOps(ops ptyPlatformOps) (*os.File, *os.File, *os.File, error) {
+	masterFD, err := ops.open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("open pty master: %w", err)
 	}
 	master := os.NewFile(uintptr(masterFD), "/dev/ptmx")
-	if err := unlockPTY(masterFD); err != nil {
+	if err := ops.unlock(masterFD); err != nil {
 		logSDKError("close PTY master after unlock failure", master.Close())
 		return nil, nil, nil, err
 	}
-	slaveName, err := ptsName(masterFD)
+	slaveName, err := ops.slaveName(masterFD)
 	if err != nil {
 		logSDKError("close PTY master after slave lookup failure", master.Close())
 		return nil, nil, nil, err
 	}
-	inputFD, err := unix.Open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
+	inputFD, err := ops.open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		logSDKError("close PTY master after input slave failure", master.Close())
 		return nil, nil, nil, fmt.Errorf("open pty input slave: %w", err)
 	}
-	outputFD, err := unix.Open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
+	outputFD, err := ops.open(slaveName, unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		logSDKError("close PTY master after output slave failure", master.Close())
-		logSDKError("close PTY input slave after output slave failure", unix.Close(inputFD))
+		logSDKError("close PTY input slave after output slave failure", ops.close(inputFD))
 		return nil, nil, nil, fmt.Errorf("open pty output slave: %w", err)
 	}
 	return master, os.NewFile(uintptr(inputFD), slaveName), os.NewFile(uintptr(outputFD), slaveName), nil

@@ -45,14 +45,19 @@ type server struct {
 	sessions *sessionManager
 }
 
+var (
+	serveModuleIO = ServeIO
+	serveExit     = os.Exit
+)
+
 // Serve runs module over stdin/stdout until the daemon sends "shutdown" or the
 // stream closes. It is the entry point for every Go module's main function:
 //
 //	func main() { hovel.Serve(&MyModule{}) }
 func Serve(module Module) {
-	if err := ServeIO(module, os.Stdin, os.Stdout); err != nil {
+	if err := serveModuleIO(module, os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "hovel sdk error: %v\n", err)
-		os.Exit(2)
+		serveExit(2)
 	}
 }
 
@@ -131,6 +136,22 @@ func (s *server) dispatch(method string, params json.RawMessage) (any, error) {
 		return s.cleanupPayload(params)
 	case "read_payload_chunk":
 		return s.readPayloadChunk(params)
+	case "payload.describe":
+		return s.describePayloads()
+	case "payload.resolve":
+		return s.resolvePayloadV1(params)
+	case "payload.generate":
+		return s.generatePayloadV1(params)
+	case "payload.artifact.read":
+		return s.readPayloadArtifact(params)
+	case "payload.listener.prepare":
+		return s.preparePayloadListener(params)
+	case "payload.connect":
+		return s.connectPayload(params)
+	case "payload.inspect":
+		return s.inspectPayload(params)
+	case "payload.cleanup":
+		return s.cleanupInstalledPayload(params)
 	case "payload.command.list":
 		return s.listPayloadCommands(params)
 	case "payload.command.run":
@@ -240,6 +261,9 @@ func (s *server) schema() map[string]any {
 	}
 	if contextPresent(schema.PlanningContext) {
 		out["planningContext"] = schema.PlanningContext
+	}
+	if provider, ok := s.module.(ChainKVContractProvider); ok {
+		out["chainKV"] = provider.ChainKVContract()
 	}
 	return out
 }
@@ -515,6 +539,98 @@ func (s *server) readPayloadChunk(params json.RawMessage) (any, error) {
 		return nil, err
 	}
 	return provider.ReadPayloadChunk(req)
+}
+
+func (s *server) describePayloads() (any, error) {
+	provider, ok := s.module.(PayloadDescriber)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.describe", s.module.Info().Name)
+	}
+	return provider.DescribePayloads()
+}
+
+func (s *server) resolvePayloadV1(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadResolver)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.resolve", s.module.Info().Name)
+	}
+	query, err := decodeParams[PayloadQuery](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ResolvePayloadV1(query)
+}
+
+func (s *server) generatePayloadV1(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadGenerator)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.generate", s.module.Info().Name)
+	}
+	request, err := decodeParams[GeneratePayloadRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GeneratePayloadV1(request)
+}
+
+func (s *server) readPayloadArtifact(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadArtifactReader)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.artifact.read", s.module.Info().Name)
+	}
+	request, err := decodeParams[ReadPayloadChunkRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ReadPayloadArtifact(request)
+}
+
+func (s *server) preparePayloadListener(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadListenerPreparer)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.listener.prepare", s.module.Info().Name)
+	}
+	request, err := decodeParams[PrepareListenerRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.PreparePayloadListener(request)
+}
+
+func (s *server) connectPayload(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadConnector)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.connect", s.module.Info().Name)
+	}
+	request, err := decodeParams[ConnectSessionRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ConnectPayload(request)
+}
+
+func (s *server) inspectPayload(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadInspector)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.inspect", s.module.Info().Name)
+	}
+	request, err := decodeParams[ConnectSessionRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.InspectPayload(request)
+}
+
+func (s *server) cleanupInstalledPayload(params json.RawMessage) (any, error) {
+	provider, ok := s.module.(PayloadCleanupProvider)
+	if !ok {
+		return nil, fmt.Errorf("module %q does not implement payload.cleanup", s.module.Info().Name)
+	}
+	request, err := decodeParams[CleanupPayloadRequest](params)
+	if err != nil {
+		return nil, err
+	}
+	return provider.CleanupInstalledPayload(request)
 }
 
 func (s *server) listPayloadCommands(params json.RawMessage) (any, error) {
@@ -907,6 +1023,10 @@ func (s *server) execute(params json.RawMessage) (any, error) {
 		ChainConfig  map[string]any `json:"chainConfig"`
 		TargetConfig map[string]any `json:"targetConfig"`
 		Agent        *AgentContext  `json:"agentContext"`
+		ChainKV      *struct {
+			Revision uint64            `json:"revision"`
+			Entries  map[string]string `json:"entries"`
+		} `json:"chainKV"`
 	}
 	if len(params) > 0 {
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -925,11 +1045,16 @@ func (s *server) execute(params json.RawMessage) (any, error) {
 		Log:          &Logger{name: s.module.Info().Name, emit: s.emitLog},
 		sessions:     registry,
 	}
+	if p.ChainKV != nil {
+		ctx.chainKV = newChainKV(p.Target, p.ChainKV.Revision, p.ChainKV.Entries)
+	} else {
+		ctx.chainKV = unavailableChainKV(p.Target)
+	}
 	result, err := s.module.Run(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return result.toRPC(registry.refs()), nil
+	return result.toRPC(registry.refs(), ctx.chainKV.wireMutations()), nil
 }
 
 func (s *server) sessionWrite(params json.RawMessage) (any, error) {

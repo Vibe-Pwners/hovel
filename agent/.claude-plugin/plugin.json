@@ -1,0 +1,13 @@
+{
+  "name": "hovel",
+  "version": "0.4.0",
+  "description": "Operate Hovel safely and effectively through its typed MCP interface.",
+  "author": {
+    "name": "Vibe Pwners",
+    "url": "https://github.com/vibepwners"
+  },
+  "homepage": "https://vibepwners.github.io/hovel/spec/agent-integrations.html",
+  "repository": "https://github.com/vibepwners/hovel",
+  "license": "Apache-2.0",
+  "keywords": ["hovel", "mcp", "security", "agent-skills"]
+}

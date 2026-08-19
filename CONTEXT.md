@@ -120,7 +120,7 @@ specific target, protocol, operating system, payload, or implant.
 11. Third-party module installation is a code-trust decision. Hovel records and
     supervises it but does not claim arbitrary code is safe.
 12. Build, test, lint, format, docs, demos, and release actions are invoked
-    through Task.
+    through Aspect CLI.
 
 ## Ubiquitous language
 
@@ -1138,7 +1138,7 @@ The repository is sparse-checkout friendly:
 | `docs/` | Book, Modules pages, API docs, VHS demos, and docs tooling. |
 | `repo-tools/` | Root dispatcher and repository-quality helpers. |
 
-`Taskfile.yml` is the only supported build entry point. Contributors and agents
+The `.aspect/` command configuration is the only supported build entry point. Contributors and agents
 do not call Bazel, gofmt, uv, or Lefthook directly. If a needed operation has no
 task, add or fix a task.
 
@@ -1148,10 +1148,10 @@ The root Task graph dispatches to:
 - the root integration workspace for SDKs, modules, Picblobs, and docs;
 - host-service docs/demo actions only in explicit host tasks.
 
-`task check` validates slices present in a sparse checkout. `task ci` requires a
+`aspect hovel-check` validates slices present in a sparse checkout. `aspect hovel-check` requires a
 full checkout and runs the remote-compatible repository-quality, core, SDK,
 modules, Picblobs, and docs gates. Host VHS rendering and complete site staging
-remain separate (`task docs:site`/`docs:ci`).
+remain separate (`aspect run //docs/tools/docs:stage_site`/`docs:ci`).
 
 Build/test tools should be Bazel-managed and pinned when practical. Cached work
 should have declared inputs/outputs. Do not add shell scripts to the build graph
@@ -1170,9 +1170,9 @@ Quality expectations include:
 - docs smoke/OpenAPI/demo verification;
 - hermeticity, visibility, ownership, and BUILD/Starlark policy checks.
 
-If Go files/imports change, run `task fmt` so Gazelle output is current. Add new
+If Go files/imports change, run `aspect format` so Gazelle output is current. Add new
 core test targets to `core/BUILD.bazel` suites. Before landing a full-checkout
-change, run `task ci`.
+change, run `aspect hovel-check`.
 
 ## Release and installation model
 
@@ -1319,7 +1319,7 @@ When changing a cross-cutting concept, check all affected surfaces:
 7. provider capability negotiation and unsupported behavior;
 8. plan, confirmation, dangerous-policy, and audit paths;
 9. Book, Modules, API docs, examples, and non-visual demo verifiers;
-10. Task-backed format, lint, build, test, race, fuzz, coverage, and full CI.
+10. Aspect-backed format, lint, build, test, race, fuzz, coverage, and full CI.
 
 If a change alters domain language or a durable architecture decision, update
 this file and the relevant ADR rather than letting code, docs, and SDKs drift.

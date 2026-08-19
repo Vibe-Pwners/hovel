@@ -13,7 +13,7 @@ MODULE.bazel
 MODULE.bazel.lock
 README.md
 LICENSE
-Taskfile.yml
+.aspect
 VERSION
 core
 docs

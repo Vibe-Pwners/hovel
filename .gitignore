@@ -9,6 +9,7 @@ lefthook-local.yml
 bazel-*
 .worktrees/
 .mypy_cache/
+.astro/
 .ruff_cache/
 .bazelrc.user
 .hovel-bazel-config
@@ -19,4 +20,6 @@ tmp/
 docs/demo/out/
 docs/demo/tmp/
 coverage/
+!tools/coverage/
+!tools/coverage/**
 .test-report/

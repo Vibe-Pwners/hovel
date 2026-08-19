@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Source this file to run the Task-backed setup path:
+# Source this file to run the Aspect-backed setup path:
 #   source sourceme
 #
-# All setup logic lives in one place: `task setup` (see Taskfile.yml).
+# Aspect/Bazel owns the repository tools and generated-file check.
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "error: this script must be sourced, not executed" >&2
@@ -12,13 +12,13 @@ fi
 
 _picblobs_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! command -v task >/dev/null 2>&1; then
-  echo "error: 'task' not found. Install it: https://taskfile.dev/installation/" >&2
+if ! command -v aspect >/dev/null 2>&1; then
+  echo "error: 'aspect' not found. Install it: https://aspect.build/docs/cli/installation" >&2
   return 1
 fi
 
-( cd "${_picblobs_root}" && task setup ) || return 1
+( cd "${_picblobs_root}/../.." && aspect run //modules/picblobs/tools:generate_check ) || return 1
 
-echo "==> Ready. Tools are provided by Task/Bazel targets. Try: task --list"
+echo "==> Ready. Tools are provided by Aspect/Bazel targets. Try: aspect help"
 
 unset _picblobs_root

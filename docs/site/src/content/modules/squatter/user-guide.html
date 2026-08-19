@@ -14,7 +14,7 @@
           catalogue's <code>bin/squatter-provider</code> command exists before
           running module checks.
         </p>
-<pre data-lang="shell"><code>task release:modules-stage
+<pre data-lang="shell"><code>aspect hovel-release modules
 HOVEL_MODULE_CONFIG=modules/examples/hovel-modules.json hovel module check squatter</code></pre>
 
         <h2>Install a Packaged Module</h2>
@@ -23,8 +23,8 @@ HOVEL_MODULE_CONFIG=modules/examples/hovel-modules.json hovel module check squat
           into a normal <code>ModulePackage</code> archive under
           <code>dist/modules</code>.
         </p>
-<pre data-lang="shell"><code>task release:modules-stage
-task release:modules-package
+<pre data-lang="shell"><code>aspect hovel-release modules
+aspect hovel-release modules
 hovel module install ./dist/modules/squatter-v0.1.0.tgz
 hovel module check squatter@v0.1.0
 hovel module installed</code></pre>

@@ -198,7 +198,7 @@ func TestProviderMeshTLSStreamPassesThroughToPayload(t *testing.T) {
 
 func TestProviderMeshTLSStreamCarriesRealWinePayload(t *testing.T) {
 	if os.Getenv("HOVEL_SQUATTER_REAL_E2E") == "" {
-		t.Skip("real Wine payload E2E is run by task modules:wine-docker-test")
+		t.Skip("real Wine payload E2E is run by aspect hovel-check modules")
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	bundle, root := testSquatterTLSBundle(t, now)

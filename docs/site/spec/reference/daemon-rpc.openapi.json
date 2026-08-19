@@ -717,6 +717,60 @@
         }
       }
     },
+    "/hovel.daemon.v1.DaemonService/BeginChainKV": {
+      "post": {
+        "tags": ["throw-runtime"], "operationId": "BeginChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVLifecycleRequest"}}}},
+        "responses": {"200": {"description": "Fresh throw KV created.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "403": {"$ref": "#/components/responses/RPCError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/SealChainKV": {
+      "post": {
+        "tags": ["throw-runtime"], "operationId": "SealChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVLifecycleRequest"}}}},
+        "responses": {"200": {"description": "Final snapshot; live store removed.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "403": {"$ref": "#/components/responses/RPCError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/GetChainKV": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "GetChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVRequest"}}}},
+        "responses": {"200": {"description": "Chain KV lookup.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/ListChainKV": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "ListChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVRequest"}}}},
+        "responses": {"200": {"description": "Chain KV keys and optional values.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/SetChainKV": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "SetChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVRequest"}}}},
+        "responses": {"200": {"description": "Committed chain KV revision.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "403": {"$ref": "#/components/responses/RPCError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/DeleteChainKV": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "DeleteChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVRequest"}}}},
+        "responses": {"200": {"description": "Committed chain KV revision.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "403": {"$ref": "#/components/responses/RPCError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/ApplyChainKV": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "ApplyChainKV",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVApplyRequest"}}}},
+        "responses": {"200": {"description": "Atomically committed chain KV batch.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChainKVResponse"}}}}, "400": {"$ref": "#/components/responses/TextError"}, "403": {"$ref": "#/components/responses/RPCError"}, "405": {"$ref": "#/components/responses/TextError"}, "413": {"$ref": "#/components/responses/RequestTooLargeError"}, "500": {"$ref": "#/components/responses/TextError"}}
+      }
+    },
     "/hovel.daemon.v1.DaemonService/SetChainConfig": {
       "post": {
         "tags": [
@@ -5594,6 +5648,66 @@
           "StepID": {
             "type": "string"
           }
+        }
+      },
+      "ChainKVRequest": {
+        "type": "object",
+        "required": ["throwId"],
+        "properties": {
+          "throwId": {"type": "string"},
+          "operation": {"type": "string"},
+          "chain": {"type": "string"},
+          "key": {"type": "string", "maxLength": 256},
+          "value": {"type": "string", "maxLength": 65536},
+          "prefix": {"type": "string"},
+          "includeValues": {"type": "boolean"},
+          "expectedRevision": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ChainKVApplyRequest": {
+        "type": "object",
+        "required": ["throwId", "expectedRevision", "mutations"],
+        "properties": {
+          "throwId": {"type": "string"},
+          "operation": {"type": "string"},
+          "chain": {"type": "string"},
+          "expectedRevision": {"type": "integer", "minimum": 0},
+          "mutations": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "required": ["operation", "key"],
+              "properties": {
+                "operation": {"type": "string", "enum": ["set", "delete"]},
+                "key": {"type": "string", "maxLength": 256},
+                "value": {"type": "string", "maxLength": 65536}
+              }
+            }
+          },
+          "moduleId": {"type": "string"},
+          "runId": {"type": "string"}
+        }
+      },
+      "ChainKVLifecycleRequest": {
+        "type": "object",
+        "required": ["throwId"],
+        "properties": {
+          "throwId": {"type": "string"},
+          "operation": {"type": "string"},
+          "chain": {"type": "string"}
+        }
+      },
+      "ChainKVResponse": {
+        "type": "object",
+        "required": ["revision"],
+        "properties": {
+          "revision": {"type": "integer", "minimum": 0},
+          "found": {"type": "boolean"},
+          "key": {"type": "string"},
+          "value": {"type": "string"},
+          "keys": {"type": "array", "items": {"type": "string"}},
+          "entries": {"type": "object", "additionalProperties": {"type": "string"}}
         }
       },
       "ConfigRequest": {

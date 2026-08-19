@@ -1,0 +1,125 @@
+<!-- hovel-doc: {"title":"Payload Provider Contract","group":"Module Development","order":3,"navTitle":"Payload Providers","description":"The additive hovel.payload/v1 contract for portable payload discovery, typed artifacts, optional provider operations, and compatibility across Go, Python, and Rust."} -->
+<article>
+  <p class="book-kicker">// portable post-exploitation interface</p>
+  <h1>Payload Provider Contract</h1>
+  <p class="book-lede">
+    <code>hovel.payload/v1</code> is the language-neutral contract for describing,
+    selecting, generating, transporting, and managing typed payload artifacts.
+    It is additive: modules written for Hovel's existing lifecycle and legacy Go
+    payload-provider interface remain valid while the 1.0 contract is completed.
+  </p>
+
+  <div class="callout warning">
+    <strong>Compatibility is the first rule.</strong> Do not rename or remove an
+    existing RPC method, field, enum value, lifecycle behavior, or SDK entry point.
+    Tightening validation must not reject a module that Hovel accepts today. New
+    behavior belongs in optional interfaces, new fields with safe defaults, or a
+    separately versioned schema.
+  </div>
+
+  <h2 id="status">Contract status</h2>
+  <table>
+    <thead><tr><th>Surface</th><th>Implemented now</th><th>Still to integrate</th></tr></thead>
+    <tbody>
+      <tr><td>Portable schema</td><td><code>hovel.payload/v1</code> descriptors, variants, target/load constraints, artifacts, and the closed content union.</td><td>Freeze golden cross-version fixtures as the release contract evolves toward 1.0.</td></tr>
+      <tr><td>Provider SDKs</td><td>Go, Python, and Rust dispatch the same <code>payload.*</code> methods and expose equivalent authoring types.</td><td>Keep language mappings in parity and publish compatibility evidence for every supported version.</td></tr>
+      <tr><td>Daemon artifacts</td><td>The daemon owns an immutable, content-addressed artifact store and validates payload schema, digests, sizes, and content choice.</td><td>Wire every operator workflow to capability-to-artifact resolution and frozen confirmation values.</td></tr>
+      <tr><td>Post-connect lifecycle</td><td>The SDK contract models listener preparation, connect, inspect, cleanup, and existing installed-payload records.</td><td>Replace example-specific orchestration and route real reconnect, inspect, cleanup, and command calls through the daemon.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="descriptor">Provider descriptor</h2>
+  <p>
+    <code>payload.describe</code> returns one structured
+    <code>PayloadProviderDescriptor</code>. Its <code>schemaVersion</code> is
+    <code>hovel.payload/v1</code>; <code>providerId</code> and <code>version</code>
+    identify the implementation; <code>operations</code> advertises only supported
+    optional behavior; and <code>payloads</code> contains selectable variants.
+    Provider-specific data belongs under namespaced <code>extensions</code> keys.
+  </p>
+  <p>
+    Each <code>PayloadVariant</code> has a stable id, display name, version, kind,
+    format, capabilities, and two compatibility records. <code>target</code>
+    declares operating system, architecture, and optional ABI, endianness, and
+    minimum OS. <code>load</code> declares the execution model and optional entry
+    contract, relocation model, and dependencies. A provider must not claim a
+    target/load combination it cannot produce.
+  </p>
+
+  <h2 id="artifact">Typed artifact content</h2>
+  <p>
+    A <code>PayloadArtifactV1</code> binds a named role and exact variant to a media
+    type, byte size, SHA-256 digest, and content source. Content is a closed tagged
+    union: exactly one of the following is present.
+  </p>
+  <table>
+    <thead><tr><th>Content member</th><th>Use</th><th>Ownership</th></tr></thead>
+    <tbody>
+      <tr><td><code>inline</code></td><td>Small encoded content returned with the response.</td><td>The daemon decodes and validates it before recording.</td></tr>
+      <tr><td><code>artifact</code></td><td>An immutable content-addressed object referenced by id.</td><td>The daemon owns storage, identity, permissions, and retrieval.</td></tr>
+      <tr><td><code>stream</code></td><td>A provider-owned handle for bounded chunked transfer.</td><td>The provider serves bytes; the daemon validates the completed artifact.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout note">
+    <strong>Artifact storage is intentionally plaintext.</strong> Hovel uses
+    owner-only filesystem permissions, content addressing, and integrity checks;
+    it does not add at-rest encryption to payload artifacts. Workspace PKI private
+    key custody is a separate security boundary described in
+    <a href="tls-pki.html">TLS and Workspace PKI</a>.
+  </div>
+
+  <h2 id="operations">Optional operations</h2>
+  <table>
+    <thead><tr><th>Advertised operation</th><th>RPC method</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>resolve</code></td><td><code>payload.resolve</code></td><td>Select one compatible variant without producing bytes.</td></tr>
+      <tr><td><code>generate</code></td><td><code>payload.generate</code></td><td>Produce one validated <code>PayloadArtifactV1</code>.</td></tr>
+      <tr><td><code>read-artifact</code></td><td><code>payload.artifact.read</code></td><td>Read bounded chunks from provider-owned content.</td></tr>
+      <tr><td><code>prepare-listener</code></td><td><code>payload.listener.prepare</code></td><td>Create provider-owned listener state before connection.</td></tr>
+      <tr><td><code>connect</code></td><td><code>payload.connect</code></td><td>Turn an installed-payload reconnect record into a session.</td></tr>
+      <tr><td><code>inspect</code></td><td><code>payload.inspect</code></td><td>Refresh provider-owned installed state without inventing daemon state.</td></tr>
+      <tr><td><code>cleanup</code></td><td><code>payload.cleanup</code></td><td>Remove or deactivate an installed payload using its cleanup descriptor.</td></tr>
+      <tr><td><code>commands</code></td><td>Existing command surfaces</td><td>Describe and run typed provider-owned post-connect actions.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Unsupported operations fail explicitly. Providers do not implement no-op
+    methods merely to look complete, and callers do not infer support from module
+    names. Squatter and Picblobs are examples, not protocol switches.
+  </p>
+
+  <h2 id="languages">Equivalent authoring surfaces</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>v1 shape</th><th>Compatibility path</th></tr></thead>
+    <tbody>
+      <tr><td>Go</td><td>Implement <code>PayloadDescriber</code> and only the optional operation interfaces advertised by the descriptor.</td><td>The monolithic <code>PayloadProvider</code> interface and its legacy RPC methods remain supported.</td></tr>
+      <tr><td>Python</td><td>Return the frozen dataclass values from the matching <code>HovelModule</code> payload methods.</td><td>Base lifecycle modules and installed-payload results retain their existing shape.</td></tr>
+      <tr><td>Rust</td><td>Return the equivalent structs from optional <code>Module</code> trait methods.</td><td>Existing lifecycle defaults continue to fail unsupported calls explicitly.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    See the <a href="module-go.html">Go</a>,
+    <a href="module-python.html">Python</a>, and
+    <a href="module-rust.html">Rust</a> chapters for language syntax. The
+    <a href="module-protocol.html">module wire protocol</a> is authoritative for
+    JSON-RPC envelopes; generated API references are authoritative for exact
+    symbols and signatures.
+  </p>
+
+  <h2 id="stability">Proving compatibility</h2>
+  <p>
+    The SDK report requires 100% branch coverage for Go, Python, and Rust. That is
+    necessary but not sufficient: branch coverage proves exercised implementation,
+    not wire compatibility. The 1.0 gate should also run frozen request/response
+    fixtures against current and previous SDK releases, round-trip every union and
+    optional field in all three languages, launch legacy modules unchanged, and
+    compare accepted/rejected cases across daemon versions. Publish those matrices
+    beside the existing coverage evidence in the site test report.
+  </p>
+  <ul>
+    <li>Keep golden JSON fixtures for minimal, complete, unknown-extension, and malformed descriptors and artifacts.</li>
+    <li>Test every optional operation independently and in combinations; omission must remain valid.</li>
+    <li>Run legacy Go providers and ordinary Go, Python, and Rust modules without recompiling their source.</li>
+    <li>Ratchet semantic compatibility separately from line and branch coverage.</li>
+  </ul>
+</article>

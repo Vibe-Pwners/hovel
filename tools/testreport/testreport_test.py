@@ -9,6 +9,72 @@ import testreport
 
 
 class TestReportTest(unittest.TestCase):
+    def test_ingests_operator_parity_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            parity = repo / "coverage/operator-parity.results.json"
+            parity.parent.mkdir(parents=True)
+            parity.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "hovel.operator-parity/v1",
+                        "totals": {
+                            "capabilities": 2,
+                            "reachable": 2,
+                            "typed": 1,
+                            "contracted": 1,
+                            "reachabilityPercentage": 100.0,
+                            "typedPercentage": 50.0,
+                            "contractPercentage": 50.0,
+                        },
+                        "capabilities": [
+                            {
+                                "id": "operation.create",
+                                "summary": "Create an operation.",
+                                "humanRoutes": ["op create"],
+                                "agentRoutes": [{"tool": "hovel_chain_apply"}],
+                                "risk": "write",
+                                "level": 3,
+                                "status": "contracted",
+                            },
+                            {
+                                "id": "chain.rename",
+                                "summary": "Rename a chain.",
+                                "humanRoutes": ["chain rename"],
+                                "fallbackTool": "hovel_command_run",
+                                "risk": "write",
+                                "level": 1,
+                                "status": "command_run",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = testreport.build_report(
+                repo=repo,
+                title="Example",
+                bep_files=[],
+                testlog_roots=[],
+                workflow="CI",
+                job="report",
+                commit="abc",
+                ref="main",
+                operator_parity_files=[parity],
+            )
+            out = repo / "evidence"
+            testreport.render_report(report, repo=repo, output=out)
+            data = json.loads((out / "data/report.json").read_text(encoding="utf-8"))
+            self.assertEqual(data["operator_parity"]["totals"]["reachabilityPercentage"], 100.0)
+            self.assertEqual(data["operator_parity"]["capabilities"][1]["status"], "command_run")
+
+    def test_rejects_unknown_operator_parity_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "parity.json"
+            path.write_text(json.dumps({"schemaVersion": "unknown/v1"}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unsupported operator parity schema"):
+                testreport.ingest_operator_parity([path])
+
     def test_ingests_linter_contract_and_materializes_logs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -29,7 +95,7 @@ class TestReportTest(unittest.TestCase):
                                 "scope": "Python",
                                 "status": "PASSED",
                                 "duration": 0.25,
-                                "commands": ["task sdk:lint"],
+                                "commands": ["aspect hovel-check sdk"],
                                 "ignore_statements": [
                                     {"path": "sdk/example.py", "line": 7, "text": "value = 1  # noqa: S101"}
                                 ],
@@ -74,7 +140,19 @@ class TestReportTest(unittest.TestCase):
             coverage_json = repo / "core/coverage/go.results.json"
             coverage_json.parent.mkdir(parents=True)
             coverage_json.write_text(
-                json.dumps([{"name": "domain", "covered": 80, "total": 100, "minimum": 75.0}]),
+                json.dumps(
+                    [
+                        {
+                            "name": "domain branches",
+                            "metric_type": "branch",
+                            "language": "go",
+                            "platforms": ["linux", "windows"],
+                            "covered": 80,
+                            "total": 100,
+                            "minimum": 75.0,
+                        }
+                    ]
+                ),
                 encoding="utf-8",
             )
             lcov = repo / "squatter.lcov"
@@ -119,6 +197,9 @@ class TestReportTest(unittest.TestCase):
             data = json.loads((out / "data/report.json").read_text(encoding="utf-8"))
 
             self.assertEqual([metric["percentage"] for metric in data["coverage"]], [80.0, 100.0, 91.0])
+            self.assertEqual(data["coverage"][0]["metric_type"], "branch")
+            self.assertEqual(data["coverage"][0]["language"], "go")
+            self.assertEqual(data["coverage"][0]["platforms"], ["linux", "windows"])
             self.assertEqual(data["jobs"][0]["status"], "PASSED")
             self.assertEqual((out / data["jobs"][0]["log_path"]).read_text(encoding="utf-8"), job_log.read_text())
             self.assertTrue(all((out / metric["source_path"]).is_file() for metric in data["coverage"]))

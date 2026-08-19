@@ -35,10 +35,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/williamkborn/pic"
-Documentation = "https://github.com/williamkborn/pic/tree/main/docs"
-Repository = "https://github.com/williamkborn/pic"
-Issues = "https://github.com/williamkborn/pic/issues"
+Homepage = "https://github.com/vibepwners/hovel/tree/main/modules/picblobs"
+Documentation = "https://vibepwners.github.io/hovel/modules/picblobs/"
+Repository = "https://github.com/vibepwners/hovel"
+Issues = "https://github.com/vibepwners/hovel/issues"
 
 [project.scripts]
 picblobs = "picblobs_cli.cli:main"

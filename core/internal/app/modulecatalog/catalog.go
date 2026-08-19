@@ -83,6 +83,20 @@ type Module struct {
 	StepContracts      StepContractSet
 	Mesh               domainmesh.Descriptor
 	CredentialDelivery *domainpki.CredentialDeliveryDescriptor
+	ChainKV            ChainKVContract
+}
+
+type ChainKVBinding struct {
+	Key         string `json:"key"`
+	ConfigKey   string `json:"configKey,omitempty"`
+	StepID      string `json:"stepId,omitempty"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+type ChainKVContract struct {
+	Requires []ChainKVBinding `json:"requires,omitempty"`
+	Produces []ChainKVBinding `json:"produces,omitempty"`
 }
 
 type Context struct {
@@ -435,6 +449,7 @@ func normalizeModule(module Module) Module {
 	module.Discovery = cloneContext(module.Discovery)
 	module.Planning = cloneContext(module.Planning)
 	module.StepContracts = cloneStepContractSet(module.StepContracts)
+	module.ChainKV = cloneChainKVContract(module.ChainKV)
 	module.Mesh = cloneMeshDescriptor(module.Mesh)
 	if module.CredentialDelivery != nil {
 		descriptor := module.CredentialDelivery.Clone()
@@ -750,6 +765,7 @@ func cloneModule(module Module) Module {
 	module.Discovery = cloneContext(module.Discovery)
 	module.Planning = cloneContext(module.Planning)
 	module.StepContracts = cloneStepContractSet(module.StepContracts)
+	module.ChainKV = cloneChainKVContract(module.ChainKV)
 	module.Mesh = cloneMeshDescriptor(module.Mesh)
 	if module.CredentialDelivery != nil {
 		descriptor := module.CredentialDelivery.Clone()
@@ -765,6 +781,12 @@ func cloneRequirements(requirements []Requirement) []Requirement {
 		out = append(out, requirement)
 	}
 	return out
+}
+
+func cloneChainKVContract(contract ChainKVContract) ChainKVContract {
+	contract.Requires = append([]ChainKVBinding(nil), contract.Requires...)
+	contract.Produces = append([]ChainKVBinding(nil), contract.Produces...)
+	return contract
 }
 
 func cloneStepContractSet(set StepContractSet) StepContractSet {

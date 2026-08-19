@@ -225,6 +225,9 @@ func TestMaterializeArtifactKeepsSameBytesDistinctAcrossThrows(t *testing.T) {
 	if firstRecord.ID == secondRecord.ID {
 		t.Fatalf("artifact ids collided: %q", firstRecord.ID)
 	}
+	if firstRecord.Path != secondRecord.Path {
+		t.Fatalf("identical content was not deduplicated: %q != %q", firstRecord.Path, secondRecord.Path)
+	}
 	artifacts, err := store.ListArtifacts(context.Background(), workspacePath)
 	if err != nil {
 		t.Fatal(err)
@@ -356,7 +359,7 @@ func TestMaterializeArtifactCopiesFileArtifactIntoWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPath := filepath.Join("artifacts", "throw-mock", "run-1", record.ID, "loot.txt")
+	wantPath := filepath.Join("artifacts", "sha256", record.SHA256[:2], record.SHA256)
 	if record.Path != wantPath {
 		t.Fatalf("path = %q, want workspace artifact path %q", record.Path, wantPath)
 	}

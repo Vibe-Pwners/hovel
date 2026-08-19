@@ -79,12 +79,21 @@ def validate_manifest(manifest: Any) -> None:
         seen.add(tool_id)
         if tool.get("kind") not in {"formatter", "linter", "static-analysis"}:
             raise ValueError(f"invalid kind for {tool_id}")
+        if not isinstance(tool.get("cwd", "."), str):
+            raise ValueError(f"invalid cwd for {tool_id}")
         commands = tool.get("commands")
         if not isinstance(commands, list) or not commands or any(
             not isinstance(command, list) or not command or not all(isinstance(arg, str) and arg for arg in command)
             for command in commands
         ):
             raise ValueError(f"invalid commands for {tool_id}")
+        command_cwds = tool.get("command_cwds")
+        if command_cwds is not None and (
+            not isinstance(command_cwds, list)
+            or len(command_cwds) != len(commands)
+            or not all(isinstance(path, str) for path in command_cwds)
+        ):
+            raise ValueError(f"invalid command_cwds for {tool_id}")
 
 
 def run_tool(repo: Path, tool: dict[str, Any], logs: Path) -> dict[str, Any]:
@@ -92,11 +101,15 @@ def run_tool(repo: Path, tool: dict[str, Any], logs: Path) -> dict[str, Any]:
     log_path = logs / f"{tool['id']}.log"
     exit_codes: list[int] = []
     commands = tool["commands"]
+    command_cwds = tool.get("command_cwds", [tool.get("cwd", ".")] * len(commands))
     with log_path.open("w", encoding="utf-8") as log:
-        for command in commands:
+        for command, relative_cwd in zip(commands, command_cwds, strict=True):
+            command_cwd = (repo / relative_cwd).resolve()
+            if repo not in command_cwd.parents and command_cwd != repo:
+                raise ValueError(f"lint tool cwd escapes repository: {tool['id']}")
             display = shlex.join(command)
             write_line(log, f"$ {display}")
-            exit_code = stream_command(repo, command, log)
+            exit_code = stream_command(command_cwd, command, log)
             exit_codes.append(exit_code)
             write_line(log, f"[exit code: {exit_code}]\n")
     duration = round(time.monotonic() - started, 3)

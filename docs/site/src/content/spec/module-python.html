@@ -141,6 +141,40 @@ class MockSurvey(HovelModule):
           records are forwarded to the daemon as <code>module/log</code> notifications.
         </p>
 
+        <h2>Pass survey findings to a later module</h2>
+        <p>
+          Declare <code>chain_kv_contract</code> so Hovel can validate producer ordering.
+          Use <code>ctx.chain_kv</code> for staged string mutations and
+          <code>ctx.resolve_input</code> for configuration-first lookup.
+        </p>
+<pre data-lang="python"><code>class MockSurvey(HovelModule):
+    chain_kv_contract = {
+        "produces": [{"key": "survey/{target}/port",
+                      "description": "Discovered service port"}],
+    }
+
+    def run(self, ctx: Context) -> Result:
+        if ctx.chain_kv.available:
+            ctx.chain_kv.set("survey/{target}/port", "8443")
+        return Result.ok()
+
+class MockExploit(HovelModule):
+    chain_kv_contract = {
+        "requires": [{"key": "survey/{target}/port",
+                      "configKey": "target.port", "required": True}],
+    }
+
+    def run(self, ctx: Context) -> Result:
+        port, source, found = ctx.resolve_input(
+            "target.port", "survey/{target}/port", "unknown"
+        )
+        return Result.ok({"port": port, "portSource": source})</code></pre>
+        <p>
+          <code>get</code>, <code>exists</code>, <code>set</code>, and <code>delete</code>
+          expand <code>{target}</code>. Mutations commit as one revision-bound batch only
+          when the module succeeds. See <a href="chain-kv.html">Chain KV Handoffs</a>.
+        </p>
+
         <h2>Findings and artifacts</h2>
         <p>An exploit reports <code>Finding</code>s and <code>Artifact</code>s, and can fail deliberately via an input.</p>
 <pre data-lang="python"><code>def run(self, ctx: Context) -> Result:
@@ -371,9 +405,9 @@ def test_session_over_framed_rpc() -&gt; None:
         </p>
 <p>
           The Python SDK and in-repo Python examples now live outside the core Bazel
-          workspace. Validate them through <code>task sdk:test</code>,
-          <code>task sdk:ci</code>, <code>task modules:examples:test</code>, and
-          <code>task modules:examples:ci</code>; the Task-backed targets remain hermetic.
+          workspace. Validate them through <code>aspect hovel-check sdk</code>,
+          <code>aspect hovel-check sdk</code>, <code>aspect hovel-check modules</code>, and
+          <code>aspect hovel-check modules</code>; the Aspect-backed targets remain hermetic.
         </p>
         <p>
           Move to daemon or CLI tests only after pure parsing, schema, failure paths,
@@ -400,7 +434,7 @@ launch:
       command: ["{python}", "-m", "hovel_example_survey"]</code></pre>
 <pre data-lang="shell"><code>hovel module install --link "$PWD/modules/examples/python/mock_survey"
 hovel module check mock-survey
-task start
+aspect hovel cli
 hovel&gt; module installed  # mock-survey, mock-exploit, mock-exploit-session ...</code></pre>
         <p>
           Python modules need no native compile step. See

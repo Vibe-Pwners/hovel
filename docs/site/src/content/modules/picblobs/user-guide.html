@@ -8,9 +8,9 @@
         </p>
 
         <h2>Prepare a Source Checkout</h2>
-        <pre><code>task picblobs:setup
-task picblobs:provider-stage
-task picblobs:stage</code></pre>
+        <pre><code>aspect hovel-check modules
+aspect run //modules/picblobs/tools:stage_hovel_provider
+aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --</code></pre>
         <p>
           The provider launcher is staged at
           <code>modules/picblobs/bin/picblobs-provider</code>. Payload bytes are
@@ -82,7 +82,7 @@ payload.format = elf</code></pre>
           the same materialization command to produce the matched server and
           client headers:
         </p>
-        <pre><code>task picblobs:mbed-blobs -- \
+        <pre><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:materialize_blobs -- -- \
   --server-ip=192.0.2.10 \
   --auth-key-file=/secure/path/mbed-poc.key \
   --port=9999</code></pre>
@@ -109,7 +109,7 @@ payload.format = elf</code></pre>
         </p>
 
         <h3 id="mbed-build-run">Build and Run the Pair</h3>
-        <pre><code>task picblobs:mbed-compile</code></pre>
+        <pre><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:compile_mbed_os --</code></pre>
         <p>
           This builds separate server and client firmware for the pinned
           NUCLEO-F429ZI/GCC_ARM target. See

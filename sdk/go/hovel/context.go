@@ -157,7 +157,8 @@ func (s *logFieldSanitizer) sanitizeMap(value reflect.Value) (any, bool) {
 		return value.Interface(), false
 	}
 	result := make(map[string]any, len(entries))
-	for _, item := range entries {
+	for index := 0; index < len(entries); index++ {
+		item := entries[index]
 		result[item.key] = item.value
 	}
 	return result, true
@@ -253,6 +254,7 @@ type Context struct {
 	Log          *Logger
 
 	sessions *sessionRegistry
+	chainKV  *ChainKV
 }
 
 // Input resolves a configuration value, preferring per-run inputs, then

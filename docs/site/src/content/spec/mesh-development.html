@@ -843,9 +843,9 @@ fn start_mesh_listener(&amp;self, req: MeshListenerStartRequest) -&gt; Result&lt
           <li>Bridge documentation and tests never imply that the local adapter adds TLS, trust validation, DTLS, or QUIC.</li>
           <li>Task, stream, listener, and bridge calls appear in <code>ListMeshOperations</code> with provider and listener provenance.</li>
         </ul>
-<pre data-lang="sh"><code>task fmt
-task check
-task ci</code></pre>
+<pre data-lang="sh"><code>aspect hovel-format
+aspect hovel-check
+aspect hovel-check</code></pre>
         <p>
           Repository development always uses Task. For out-of-tree providers, mirror the
           SDK's framed-RPC tests in your own build and run them against malformed input,

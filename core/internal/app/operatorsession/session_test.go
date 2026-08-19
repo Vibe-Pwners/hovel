@@ -1,6 +1,7 @@
 package operatorsession
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/vibepwners/hovel/internal/app/operatorlog"
@@ -35,6 +36,57 @@ func TestSessionCreatesUsesListsAndDeletesChains(t *testing.T) {
 	}
 	if session.Snapshot().ActiveChain != "" {
 		t.Fatal("deleted active chain should clear active chain")
+	}
+}
+
+func TestChainKVIsEphemeralAndRejectsStaleBatches(t *testing.T) {
+	session := New()
+	if err := session.CreateChain("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.UseChain("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := session.ChainKVSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.Revision != 0 || len(initial.Entries) != 0 {
+		t.Fatalf("initial = %#v", initial)
+	}
+	expected := initial.Revision
+	updated, err := session.ApplyChainKV(&expected, []ChainKVMutation{{Operation: "set", Key: "survey/mock%3A%2F%2Ftarget/port", Value: "445"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Revision != 1 || updated.Entries["survey/mock%3A%2F%2Ftarget/port"] != "445" {
+		t.Fatalf("updated = %#v", updated)
+	}
+	if _, err := session.ApplyChainKV(&expected, []ChainKVMutation{{Operation: "set", Key: "stale", Value: "value"}}); !errors.Is(err, ErrChainKVRevisionConflict) {
+		t.Fatalf("stale error = %v", err)
+	}
+	persisted := session.Export()
+	restored := New()
+	restored.Import(persisted)
+	restoredSnapshot, err := restored.ChainKVSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restoredSnapshot.Revision != 0 || len(restoredSnapshot.Entries) != 0 {
+		t.Fatalf("restored = %#v, want fresh ephemeral state", restoredSnapshot)
+	}
+	if err := restored.CreateChain("beta"); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.UseChain("beta"); err != nil {
+		t.Fatal(err)
+	}
+	beta, err := restored.ChainKVSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(beta.Entries) != 0 {
+		t.Fatalf("beta = %#v", beta)
 	}
 }
 

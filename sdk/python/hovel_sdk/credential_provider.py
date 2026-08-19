@@ -756,12 +756,7 @@ class CredentialStampExecutionResult:
 
     def to_rpc(self) -> dict[str, Any]:
         self.validate()
-        if isinstance(self.output, CredentialArtifactOutput):
-            output_key = "artifact"
-        elif isinstance(self.output, CredentialDeploymentOutput):
-            output_key = "deployment"
-        else:
-            raise TypeError("credential stamp output must be an artifact or deployment")
+        output_key = "artifact" if isinstance(self.output, CredentialArtifactOutput) else "deployment"
         return {
             "stampId": self.stamp_id,
             "output": {output_key: self.output.to_rpc()},

@@ -213,13 +213,19 @@ func TestMCPServerExposesTypedReadOnlyTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools returned error: %v", err)
 	}
+	destructiveNames := map[string]bool{ToolCommandRun: true, ToolChainApply: true}
+	for _, route := range OperatorCapabilityRoutes() {
+		if route.Risk != commands.CapabilityRead {
+			destructiveNames[route.Tool] = true
+		}
+	}
 	names := make([]string, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
 		if tool.Name == ToolCommandRun {
 			assertCommandRunJSONOutputSchema(t, tool)
 		}
-		if tool.Name == ToolChainApply || tool.Name == ToolCommandRun || tool.Name == ToolThrowPlan || tool.Name == ToolThrowConfirm || tool.Name == ToolThrowStart || tool.Name == ToolSessionCall || tool.Name == ToolPayloadCmd || tool.Name == ToolPayloadCall || tool.Name == ToolPayloadCommandCall {
+		if destructiveNames[tool.Name] {
 			if tool.Annotations == nil || tool.Annotations.ReadOnlyHint || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint {
 				t.Fatalf("tool %s is missing destructive annotations", tool.Name)
 			}
@@ -230,10 +236,10 @@ func TestMCPServerExposesTypedReadOnlyTools(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	wantNames := []string{ToolCatalogSnapshot, ToolChainApply, ToolChainSuggest, ToolCommandRun, ToolInstalledPayloadList, ToolLaunchKeyPolicy, ToolModuleInspect, ToolModuleSearch, ToolOperationList, ToolOperatorIdentity, ToolOperatorListEntities, ToolPayloadCall, ToolPayloadCapabilities, ToolPayloadCmd, ToolPayloadCommandCall, ToolPayloadCommandList, ToolSessionCall, ToolSessionCapabilities, ToolThrowConfirm, ToolThrowPlan, ToolThrowStart, ToolWorkspaceSnapshot}
-	sort.Strings(wantNames)
-	if !reflect.DeepEqual(names, wantNames) {
-		t.Fatalf("tool names = %#v, want %#v", names, wantNames)
+	advertised := defaultCapabilities()
+	sort.Strings(advertised)
+	if !reflect.DeepEqual(names, advertised) {
+		t.Fatalf("registered tools = %#v, advertised capabilities = %#v", names, advertised)
 	}
 
 	commandResult, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
@@ -249,6 +255,21 @@ func TestMCPServerExposesTypedReadOnlyTools(t *testing.T) {
 	}
 	if values, ok := commandOut.JSON.([]any); !ok || len(values) != 2 || values[0] != "ok" {
 		t.Fatalf("command json = %#v", commandOut.JSON)
+	}
+
+	renameResult, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: capabilityToolName("chain.rename"),
+		Arguments: map[string]any{
+			"chain": "alpha",
+			"name":  "bravo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(chain.rename) returned error: %v", err)
+	}
+	renameOut := decodeStructured[commandRunOutput](t, renameResult)
+	if want := []string{"chain", "rename", "alpha", "bravo"}; !reflect.DeepEqual(renameOut.Args, want) {
+		t.Fatalf("generated chain.rename args = %#v, want %#v", renameOut.Args, want)
 	}
 
 	identityResult, err := session.CallTool(ctx, &mcpsdk.CallToolParams{Name: ToolOperatorIdentity})
@@ -394,9 +415,9 @@ func TestMCPCommandRunRejectsLaunchKeyPolicyMutation(t *testing.T) {
 	attached, err := Attach(context.Background(), daemon, OperatorOptions{
 		EntityID:    "mcp-command-policy-test",
 		DisplayName: "MCP command policy test",
-		CommandRunner: func(context.Context, commandRunInput) (commandRunOutput, error) {
+		CommandRunner: func(_ context.Context, input commandRunInput) (commandRunOutput, error) {
 			called = true
-			return commandRunOutput{ExitCode: 0}, nil
+			return commandRunOutput{Args: input.Args, ExitCode: 0}, nil
 		},
 	})
 	if err != nil {
@@ -404,14 +425,14 @@ func TestMCPCommandRunRejectsLaunchKeyPolicyMutation(t *testing.T) {
 	}
 	defer detachTestOperator(t, attached)
 
-	_, _, err = attached.commandRun(context.Background(), nil, commandRunInput{
+	_, out, err := attached.commandRun(context.Background(), nil, commandRunInput{
 		Args: []string{"hovel", "launch-key", "policy", "set", "all_connected"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "human-only") {
-		t.Fatalf("commandRun returned %v, want human-only policy error", err)
+		t.Fatalf("commandRun error = %v, want human-only policy rejection", err)
 	}
-	if called {
-		t.Fatal("command runner was invoked for a human-only policy mutation")
+	if called || out.OK {
+		t.Fatalf("command runner called = %v, output = %#v", called, out)
 	}
 }
 

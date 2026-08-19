@@ -8,7 +8,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use hovel::json::Value;
-use hovel::{Context, Info, Module, ModuleType, Outcome, Requirement, Schema};
+use hovel::{ChainKVBinding, ChainKVContract, Context, Info, Module, ModuleType, Outcome, Requirement, Schema};
 
 struct MockSurvey;
 
@@ -35,9 +35,25 @@ impl Module for MockSurvey {
         }
     }
 
+    fn chain_kv_contract(&self) -> Option<ChainKVContract> {
+        Some(ChainKVContract {
+            produces: vec![ChainKVBinding {
+                key: "survey/{target}/port".into(),
+                description: "TCP port confirmed by the survey.".into(),
+                ..ChainKVBinding::default()
+            }],
+            ..ChainKVContract::default()
+        })
+    }
+
     fn run(&self, ctx: &mut Context) -> Outcome {
         let host = ctx.input_str("target.host", &ctx.target);
         let port = ctx.input_str("target.port", "unknown");
+        if ctx.chain_kv.available() {
+            if let Err(err) = ctx.chain_kv.set("survey/{target}/port", &port) {
+                return Outcome::failed(&err);
+            }
+        }
         let fields = [
             ("host", Value::from(host.as_str())),
             ("port", Value::from(port.as_str())),
@@ -79,5 +95,7 @@ mod tests {
         let schema = MockSurvey.schema();
         assert_eq!(schema.target_config.len(), 2);
         assert_eq!(schema.target_config[0].key, "target.host");
+        let contract = MockSurvey.chain_kv_contract().unwrap();
+        assert_eq!(contract.produces[0].key, "survey/{target}/port");
     }
 }

@@ -1,19 +1,15 @@
-# Lefthook drives the same Task targets developers and CI use. Each Git hook
-# maps to one task so the Taskfile stays the single source of truth.
+# Lefthook drives the same Aspect commands developers and CI use.
 #
-# Install (or refresh) the hooks with: task hooks:install
-#
-# pre-commit  -> task precommit  (lint, Squatter static checks, build; fast)
-# pre-push    -> task prepush    (tests; thorough)
+# Install (or refresh) the hooks with: aspect hovel-hooks
 #
 # Skip a hook for one command with LEFTHOOK=0, e.g. LEFTHOOK=0 git commit ...
 
 pre-commit:
   jobs:
     - name: precommit
-      run: task precommit
+      run: aspect hovel-check repo && aspect hovel-check core
 
 pre-push:
   jobs:
     - name: prepush
-      run: task prepush
+      run: aspect hovel-check

@@ -27,8 +27,22 @@ go_library(
 )
 
 go_test(
+    name = "mcp_contract_test",
+    size = "small",
+    srcs = ["contract_test.go"],
+    embed = [":mcp"],
+    deps = [
+        "//internal/app/commands",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_test(
     name = "mcp_test",
-    srcs = ["server_test.go"],
+    srcs = [
+        "contract_test.go",
+        "server_test.go",
+    ],
     data = [
     ],
     embed = [":mcp"],

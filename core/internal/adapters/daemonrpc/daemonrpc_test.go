@@ -2831,6 +2831,133 @@ func TestSessionMutationsPersistSnapshots(t *testing.T) {
 	}
 }
 
+func TestChainKVRPCIsFreshPerThrowAndUnavailableAfterSeal(t *testing.T) {
+	socketPath := shortTempDir(t) + "/hoveld.sock"
+	runs := services.NewRunService(
+		mockexploit.Runner{},
+		discardEvents{},
+		&sequenceIDs{values: []string{"run-1"}},
+		fixedClock{now: time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)},
+	)
+	serveTestDaemon(t, socketPath, runs,
+		WithSession(operatorsession.New()),
+		WithLogBroker(NewLogBroker()),
+	)
+
+	client, err := Dial(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestClient(t, client)
+	ctx := context.Background()
+	lifecycle := ChainKVLifecycleRequest{ThrowID: "throw-one", Operation: "redteam-lab", Chain: "alpha"}
+	if _, err := client.BeginChainKV(ctx, lifecycle); err != nil {
+		t.Fatal(err)
+	}
+	set, err := client.SetChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, Operation: lifecycle.Operation, Chain: lifecycle.Chain, Key: "survey/port", Value: "445"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Revision != 1 {
+		t.Fatalf("set revision = %d, want 1", set.Revision)
+	}
+	listed, err := client.ListChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, Prefix: "survey/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Keys) != 1 || len(listed.Entries) != 0 {
+		t.Fatalf("keys-only list = %#v", listed)
+	}
+	got, err := client.GetChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, Key: "survey/port"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found || got.Value != "445" {
+		t.Fatalf("get = %#v", got)
+	}
+	stale := uint64(0)
+	if _, err := client.SetChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, Key: "survey/stale", Value: "value", ExpectedRevision: &stale}); err == nil {
+		t.Fatal("stale revision unexpectedly committed")
+	}
+	sealed, err := client.SealChainKV(ctx, lifecycle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sealed.Entries["survey/port"] != "445" {
+		t.Fatalf("sealed entries = %#v", sealed.Entries)
+	}
+	if _, err := client.GetChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, Key: "survey/port"}); err == nil {
+		t.Fatal("sealed throw remained online")
+	}
+	lifecycle.ThrowID = "throw-two"
+	if _, err := client.BeginChainKV(ctx, lifecycle); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := client.ListChainKV(ctx, ChainKVRequest{ThrowID: lifecycle.ThrowID, IncludeValues: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fresh.Entries) != 0 || fresh.Revision != 0 {
+		t.Fatalf("new throw kv = %#v, want empty", fresh)
+	}
+}
+
+func TestChainKVRPCWithoutThrowUsesOperatorSession(t *testing.T) {
+	socketPath := shortTempDir(t) + "/hoveld.sock"
+	session := operatorsession.New()
+	if err := session.UseOperation("redteam-lab"); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.CreateChain("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	serveTestDaemon(t, socketPath, services.NewRunService(
+		mockexploit.Runner{},
+		discardEvents{},
+		&sequenceIDs{values: []string{"run-1"}},
+		fixedClock{now: time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)},
+	), WithSession(session), WithLogBroker(NewLogBroker()))
+
+	client, err := Dial(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestClient(t, client)
+	ctx := context.Background()
+	request := ChainKVRequest{Operation: "redteam-lab", Chain: "alpha", Key: "survey/port", Value: "445"}
+	set, err := client.SetChainKV(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Revision != 1 {
+		t.Fatalf("set revision = %d, want 1", set.Revision)
+	}
+	got, err := client.GetChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found || got.Value != "445" {
+		t.Fatalf("get = %#v", got)
+	}
+	listed, err := client.ListChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Prefix: "survey/", IncludeValues: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(listed.Entries, map[string]string{"survey/port": "445"}) {
+		t.Fatalf("list entries = %#v", listed.Entries)
+	}
+	if _, err := client.DeleteChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key}); err != nil {
+		t.Fatal(err)
+	}
+	missing, err := client.GetChainKV(ctx, ChainKVRequest{Operation: request.Operation, Chain: request.Chain, Key: request.Key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing.Found {
+		t.Fatalf("deleted key still present: %#v", missing)
+	}
+}
+
 func TestActiveLogsDoesNotPersistSnapshot(t *testing.T) {
 	socketPath := shortTempDir(t) + "/hoveld.sock"
 	runs := services.NewRunService(

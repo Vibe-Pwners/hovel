@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -184,6 +186,7 @@ func (e *RemoteError) Error() string {
 }
 
 type RunMockExploitRequest struct {
+	ThrowID      string
 	Operation    string
 	Chain        string
 	ModuleID     string
@@ -284,16 +287,18 @@ type PollLogsResponse struct {
 }
 
 type RunMockExploitResponse struct {
-	RunID             string
-	ModuleID          string
-	Target            string
-	State             string
-	Summary           string
-	Findings          []Finding
-	Artifacts         []Artifact
-	Logs              []LogEntry
-	Sessions          []SessionRef
-	InstalledPayloads []InstalledPayloadDescriptor
+	RunID              string
+	ModuleID           string
+	Target             string
+	State              string
+	Summary            string
+	Findings           []Finding
+	Artifacts          []Artifact
+	Logs               []LogEntry
+	Sessions           []SessionRef
+	InstalledPayloads  []InstalledPayloadDescriptor
+	ChainKVRevision    uint64
+	ChainKVMutatedKeys []string
 }
 
 type ExecuteModuleResponse = RunMockExploitResponse
@@ -728,7 +733,15 @@ type Server struct {
 	pkiSecrets      bool
 	privileged      bool
 	persistSession  func(operatorsession.PersistedState) error
+	throwKV         map[string]*throwKVState
 	mu              sync.Mutex
+}
+
+type throwKVState struct {
+	Operation string
+	Chain     string
+	Revision  uint64
+	Entries   map[string]string
 }
 
 func Register(mux *http.ServeMux, runs services.RunService, options ...ServerOption) error {
@@ -772,6 +785,13 @@ func Register(mux *http.ServeMux, runs services.RunService, options ...ServerOpt
 	registerPrivilegedUnary[ModuleRequest, StepResponse](mux, "AddModule", rpcServer.privileged, rpcServer.addModuleRPC)
 	registerPrivilegedUnary[ConfigRequest, EmptyResponse](mux, "SetChainConfig", rpcServer.privileged, rpcServer.setChainConfigRPC)
 	registerPrivilegedUnary[ConfigRequest, EmptyResponse](mux, "UnsetChainConfig", rpcServer.privileged, rpcServer.unsetChainConfigRPC)
+	registerUnary[ChainKVRequest, ChainKVResponse](mux, "GetChainKV", rpcServer.getChainKVRPC)
+	registerUnary[ChainKVRequest, ChainKVResponse](mux, "ListChainKV", rpcServer.listChainKVRPC)
+	registerPrivilegedUnary[ChainKVLifecycleRequest, ChainKVResponse](mux, "BeginChainKV", rpcServer.privileged, rpcServer.beginChainKVRPC)
+	registerPrivilegedUnary[ChainKVLifecycleRequest, ChainKVResponse](mux, "SealChainKV", rpcServer.privileged, rpcServer.sealChainKVRPC)
+	registerPrivilegedUnary[ChainKVRequest, ChainKVResponse](mux, "SetChainKV", rpcServer.privileged, rpcServer.setChainKVRPC)
+	registerPrivilegedUnary[ChainKVRequest, ChainKVResponse](mux, "DeleteChainKV", rpcServer.privileged, rpcServer.deleteChainKVRPC)
+	registerPrivilegedUnary[ChainKVApplyRequest, ChainKVResponse](mux, "ApplyChainKV", rpcServer.privileged, rpcServer.applyChainKVRPC)
 	registerPrivilegedUnary[TargetConfigRequest, EmptyResponse](mux, "SetTargetConfig", rpcServer.privileged, rpcServer.setTargetConfigRPC)
 	registerPrivilegedUnary[TargetConfigRequest, EmptyResponse](mux, "UnsetTargetConfig", rpcServer.privileged, rpcServer.unsetTargetConfigRPC)
 	registerUnary[SnapshotRequest, SnapshotResponse](mux, "Snapshot", rpcServer.snapshotRPC)
@@ -1151,7 +1171,19 @@ func (s *Server) executeModule(ctx context.Context, req ExecuteModuleRequest, re
 			return fmt.Errorf("parse throw started timestamp: %w", err)
 		}
 	}
-	result, err := s.runs.ExecuteModule(ctx, services.ExecuteModuleRequest{
+	var kvSnapshot *operatorsession.ChainKVSnapshot
+	if strings.TrimSpace(req.ThrowID) != "" {
+		s.mu.Lock()
+		state, err := s.liveThrowKV(req.ThrowID, req.Operation, req.Chain)
+		if err == nil {
+			kvSnapshot = &operatorsession.ChainKVSnapshot{Revision: state.Revision, Entries: maps.Clone(state.Entries)}
+		}
+		s.mu.Unlock()
+		if err != nil {
+			return err
+		}
+	}
+	serviceRequest := services.ExecuteModuleRequest{
 		Operation:    req.Operation,
 		Chain:        req.Chain,
 		ModuleID:     req.ModuleID,
@@ -1160,11 +1192,51 @@ func (s *Server) executeModule(ctx context.Context, req ExecuteModuleRequest, re
 		ChainConfig:  req.ChainConfig,
 		TargetConfig: req.TargetConfig,
 		ThrowStarted: throwStarted,
-	})
+	}
+	if kvSnapshot != nil {
+		serviceRequest.ChainKV = &run.ChainKVSnapshot{Revision: kvSnapshot.Revision, Entries: kvSnapshot.Entries}
+	}
+	result, err := s.runs.ExecuteModule(ctx, serviceRequest)
 	if err != nil {
 		return err
 	}
+	var committedKV ChainKVResponse
+	if result.State == run.StateSucceeded && len(result.ChainKVMutations) > 0 {
+		if kvSnapshot == nil {
+			return errors.New("module returned chain kv mutations without chain kv support")
+		}
+		if result.ChainKVBaseRevision != kvSnapshot.Revision {
+			return fmt.Errorf("module chain kv base revision %d does not match supplied revision %d", result.ChainKVBaseRevision, kvSnapshot.Revision)
+		}
+		mutations := make([]operatorsession.ChainKVMutation, 0, len(result.ChainKVMutations))
+		for _, mutation := range result.ChainKVMutations {
+			mutations = append(mutations, operatorsession.ChainKVMutation{
+				Operation: mutation.Operation,
+				Key:       mutation.Key,
+				Value:     mutation.Value,
+			})
+		}
+		if err := s.ApplyChainKV(ChainKVApplyRequest{
+			ThrowID:          req.ThrowID,
+			Operation:        req.Operation,
+			Chain:            req.Chain,
+			ExpectedRevision: kvSnapshot.Revision,
+			Mutations:        mutations,
+			ModuleID:         req.ModuleID,
+			RunID:            result.ID,
+		}, &committedKV); err != nil {
+			return err
+		}
+	}
 	*resp = responseFromResult(result)
+	if committedKV.Revision > 0 {
+		resp.ChainKVRevision = committedKV.Revision
+		for _, mutation := range result.ChainKVMutations {
+			resp.ChainKVMutatedKeys = append(resp.ChainKVMutatedKeys, mutation.Key)
+		}
+		slices.Sort(resp.ChainKVMutatedKeys)
+		resp.ChainKVMutatedKeys = slices.Compact(resp.ChainKVMutatedKeys)
+	}
 	return nil
 }
 
@@ -1698,6 +1770,42 @@ type ConfigRequest struct {
 	Chain     string
 }
 
+type ChainKVRequest struct {
+	ThrowID          string  `json:"throwId,omitempty"`
+	Operation        string  `json:"operation,omitempty"`
+	Chain            string  `json:"chain,omitempty"`
+	Key              string  `json:"key,omitempty"`
+	Value            string  `json:"value,omitempty"`
+	Prefix           string  `json:"prefix,omitempty"`
+	IncludeValues    bool    `json:"includeValues,omitempty"`
+	ExpectedRevision *uint64 `json:"expectedRevision,omitempty"`
+}
+
+type ChainKVApplyRequest struct {
+	ThrowID          string                            `json:"throwId"`
+	Operation        string                            `json:"operation,omitempty"`
+	Chain            string                            `json:"chain,omitempty"`
+	ExpectedRevision uint64                            `json:"expectedRevision"`
+	Mutations        []operatorsession.ChainKVMutation `json:"mutations"`
+	ModuleID         string                            `json:"moduleId,omitempty"`
+	RunID            string                            `json:"runId,omitempty"`
+}
+
+type ChainKVLifecycleRequest struct {
+	ThrowID   string `json:"throwId"`
+	Operation string `json:"operation,omitempty"`
+	Chain     string `json:"chain,omitempty"`
+}
+
+type ChainKVResponse struct {
+	Revision uint64            `json:"revision"`
+	Found    bool              `json:"found,omitempty"`
+	Key      string            `json:"key,omitempty"`
+	Value    string            `json:"value,omitempty"`
+	Keys     []string          `json:"keys,omitempty"`
+	Entries  map[string]string `json:"entries,omitempty"`
+}
+
 type TargetConfigRequest struct {
 	Operation string
 	Target    string
@@ -2118,6 +2226,225 @@ func (s *Server) UnsetChainConfig(req ConfigRequest, resp *EmptyResponse) error 
 	})
 }
 
+func (s *Server) GetChainKV(req ChainKVRequest, resp *ChainKVResponse) error {
+	if strings.TrimSpace(req.ThrowID) == "" {
+		return s.withChainRead(req.Operation, req.Chain, func(session *operatorsession.Session, _, _ string) error {
+			snapshot, err := session.ChainKVSnapshot()
+			if err != nil {
+				return err
+			}
+			resp.Revision = snapshot.Revision
+			resp.Key = req.Key
+			resp.Value, resp.Found = snapshot.Entries[req.Key]
+			return nil
+		})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.liveThrowKV(req.ThrowID, req.Operation, req.Chain)
+	if err != nil {
+		return err
+	}
+	resp.Revision = state.Revision
+	resp.Key = req.Key
+	resp.Value, resp.Found = state.Entries[req.Key]
+	return nil
+}
+
+func (s *Server) ListChainKV(req ChainKVRequest, resp *ChainKVResponse) error {
+	if strings.TrimSpace(req.ThrowID) == "" {
+		return s.withChainRead(req.Operation, req.Chain, func(session *operatorsession.Session, _, _ string) error {
+			snapshot, err := session.ChainKVSnapshot()
+			if err != nil {
+				return err
+			}
+			populateChainKVResponse(snapshot, req, resp)
+			return nil
+		})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.liveThrowKV(req.ThrowID, req.Operation, req.Chain)
+	if err != nil {
+		return err
+	}
+	resp.Revision = state.Revision
+	for key, value := range state.Entries {
+		if req.Prefix != "" && !strings.HasPrefix(key, req.Prefix) {
+			continue
+		}
+		resp.Keys = append(resp.Keys, key)
+		if req.IncludeValues {
+			if resp.Entries == nil {
+				resp.Entries = map[string]string{}
+			}
+			resp.Entries[key] = value
+		}
+	}
+	sort.Strings(resp.Keys)
+	return nil
+}
+
+func (s *Server) SetChainKV(req ChainKVRequest, resp *ChainKVResponse) error {
+	if strings.TrimSpace(req.ThrowID) == "" {
+		return s.applySessionChainKV(req, []operatorsession.ChainKVMutation{{Operation: "set", Key: req.Key, Value: req.Value}}, resp)
+	}
+	return s.applyChainKV(req.ThrowID, req.Operation, req.Chain, req.ExpectedRevision, []operatorsession.ChainKVMutation{{Operation: "set", Key: req.Key, Value: req.Value}}, "", "", resp)
+}
+
+func (s *Server) DeleteChainKV(req ChainKVRequest, resp *ChainKVResponse) error {
+	if strings.TrimSpace(req.ThrowID) == "" {
+		return s.applySessionChainKV(req, []operatorsession.ChainKVMutation{{Operation: "delete", Key: req.Key}}, resp)
+	}
+	return s.applyChainKV(req.ThrowID, req.Operation, req.Chain, req.ExpectedRevision, []operatorsession.ChainKVMutation{{Operation: "delete", Key: req.Key}}, "", "", resp)
+}
+
+func (s *Server) applySessionChainKV(req ChainKVRequest, mutations []operatorsession.ChainKVMutation, resp *ChainKVResponse) error {
+	return s.withChain(req.Operation, req.Chain, func(session *operatorsession.Session, operation, chain string) error {
+		snapshot, err := session.ApplyChainKV(req.ExpectedRevision, mutations)
+		if err != nil {
+			return err
+		}
+		resp.Revision = snapshot.Revision
+		s.publish(operation, chain, operatorlog.Info("chain-kv", "session kv mutation applied",
+			operatorlog.Field{Name: "mutations", Value: fmt.Sprint(len(mutations))},
+			operatorlog.Field{Name: "revision", Value: fmt.Sprint(snapshot.Revision)},
+		))
+		return nil
+	})
+}
+
+func populateChainKVResponse(snapshot operatorsession.ChainKVSnapshot, req ChainKVRequest, resp *ChainKVResponse) {
+	resp.Revision = snapshot.Revision
+	for key, value := range snapshot.Entries {
+		if req.Prefix != "" && !strings.HasPrefix(key, req.Prefix) {
+			continue
+		}
+		resp.Keys = append(resp.Keys, key)
+		if req.IncludeValues {
+			if resp.Entries == nil {
+				resp.Entries = map[string]string{}
+			}
+			resp.Entries[key] = value
+		}
+	}
+	sort.Strings(resp.Keys)
+}
+
+func (s *Server) ApplyChainKV(req ChainKVApplyRequest, resp *ChainKVResponse) error {
+	return s.applyChainKV(req.ThrowID, req.Operation, req.Chain, &req.ExpectedRevision, req.Mutations, req.ModuleID, req.RunID, resp)
+}
+
+func (s *Server) applyChainKV(throwID, operationName, chainName string, expected *uint64, mutations []operatorsession.ChainKVMutation, moduleID, runID string, resp *ChainKVResponse) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.liveThrowKV(throwID, operationName, chainName)
+	if err != nil {
+		return err
+	}
+	if expected != nil && state.Revision != *expected {
+		return fmt.Errorf("%w: expected %d, current %d", operatorsession.ErrChainKVRevisionConflict, *expected, state.Revision)
+	}
+	next := maps.Clone(state.Entries)
+	for _, mutation := range mutations {
+		if strings.TrimSpace(mutation.Key) == "" || len(mutation.Key) > operatorsession.MaxChainKVKeyBytes {
+			return errors.New("invalid chain kv key")
+		}
+		switch mutation.Operation {
+		case "set":
+			if len(mutation.Value) > operatorsession.MaxChainKVValueBytes {
+				return errors.New("chain kv value is too large")
+			}
+			next[mutation.Key] = mutation.Value
+		case "delete":
+			delete(next, mutation.Key)
+		default:
+			return errors.New("chain kv operation must be set or delete")
+		}
+	}
+	total := 0
+	for key, value := range next {
+		total += len(key) + len(value)
+	}
+	if total > operatorsession.MaxChainKVTotalBytes {
+		return errors.New("chain kv store is too large")
+	}
+	state.Entries = next
+	if len(mutations) > 0 {
+		state.Revision++
+	}
+	resp.Revision = state.Revision
+	fields := []operatorlog.Field{
+		{Name: "mutations", Value: fmt.Sprint(len(mutations))},
+		{Name: "revision", Value: fmt.Sprint(state.Revision)},
+	}
+	if moduleID != "" {
+		fields = append(fields, operatorlog.Field{Name: "module", Value: moduleID})
+	}
+	if runID != "" {
+		fields = append(fields, operatorlog.Field{Name: "run", Value: runID})
+	}
+	s.publish(state.Operation, state.Chain, operatorlog.Info("chain-kv", "throw kv mutation batch applied", fields...))
+	return nil
+}
+
+func (s *Server) BeginChainKV(req ChainKVLifecycleRequest, resp *ChainKVResponse) error {
+	if strings.TrimSpace(req.ThrowID) == "" {
+		return errors.New("throw id is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.throwKV == nil {
+		s.throwKV = map[string]*throwKVState{}
+	}
+	if _, exists := s.throwKV[req.ThrowID]; exists {
+		return errors.New("throw kv already exists")
+	}
+	s.throwKV[req.ThrowID] = &throwKVState{Operation: normalizedOperation(req.Operation), Chain: req.Chain, Entries: map[string]string{}}
+	return nil
+}
+
+func (s *Server) SealChainKV(req ChainKVLifecycleRequest, resp *ChainKVResponse) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.liveThrowKV(req.ThrowID, req.Operation, req.Chain)
+	if err != nil {
+		return err
+	}
+	resp.Revision = state.Revision
+	resp.Entries = maps.Clone(state.Entries)
+	for key := range state.Entries {
+		resp.Keys = append(resp.Keys, key)
+	}
+	sort.Strings(resp.Keys)
+	delete(s.throwKV, req.ThrowID)
+	return nil
+}
+
+func (s *Server) liveThrowKV(throwID, operationName, chainName string) (*throwKVState, error) {
+	if strings.TrimSpace(throwID) == "" {
+		return nil, errors.New("throw id is required")
+	}
+	state := s.throwKV[throwID]
+	if state == nil {
+		return nil, errors.New("throw kv is not live")
+	}
+	if operationName != "" && state.Operation != normalizedOperation(operationName) {
+		return nil, errors.New("throw kv operation does not match")
+	}
+	if chainName != "" && state.Chain != chainName {
+		return nil, errors.New("throw kv chain does not match")
+	}
+	return state, nil
+}
+
+func normalizedOperation(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return operatorsession.DefaultOperation
+	}
+	return strings.TrimSpace(name)
+}
+
 func (s *Server) SetTargetConfig(req TargetConfigRequest, resp *EmptyResponse) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2292,6 +2619,48 @@ func (s *Server) setChainConfigRPC(_ context.Context, req ConfigRequest) (EmptyR
 func (s *Server) unsetChainConfigRPC(_ context.Context, req ConfigRequest) (EmptyResponse, error) {
 	var resp EmptyResponse
 	err := s.UnsetChainConfig(req, &resp)
+	return resp, err
+}
+
+func (s *Server) getChainKVRPC(_ context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.GetChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) beginChainKVRPC(_ context.Context, req ChainKVLifecycleRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.BeginChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) sealChainKVRPC(_ context.Context, req ChainKVLifecycleRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.SealChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) listChainKVRPC(_ context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.ListChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) setChainKVRPC(_ context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.SetChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) deleteChainKVRPC(_ context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.DeleteChainKV(req, &resp)
+	return resp, err
+}
+
+func (s *Server) applyChainKVRPC(_ context.Context, req ChainKVApplyRequest) (ChainKVResponse, error) {
+	var resp ChainKVResponse
+	err := s.ApplyChainKV(req, &resp)
 	return resp, err
 }
 
@@ -3647,6 +4016,34 @@ func (c *Client) Snapshot(ctx context.Context, req SnapshotRequest) (SnapshotRes
 	return invoke[SnapshotRequest, SnapshotResponse](c, ctx, "Snapshot", req)
 }
 
+func (c *Client) GetChainKV(ctx context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](c, ctx, "GetChainKV", req)
+}
+
+func (c *Client) BeginChainKV(ctx context.Context, req ChainKVLifecycleRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVLifecycleRequest, ChainKVResponse](c, ctx, "BeginChainKV", req)
+}
+
+func (c *Client) SealChainKV(ctx context.Context, req ChainKVLifecycleRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVLifecycleRequest, ChainKVResponse](c, ctx, "SealChainKV", req)
+}
+
+func (c *Client) ListChainKV(ctx context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](c, ctx, "ListChainKV", req)
+}
+
+func (c *Client) SetChainKV(ctx context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](c, ctx, "SetChainKV", req)
+}
+
+func (c *Client) DeleteChainKV(ctx context.Context, req ChainKVRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](c, ctx, "DeleteChainKV", req)
+}
+
+func (c *Client) ApplyChainKV(ctx context.Context, req ChainKVApplyRequest) (ChainKVResponse, error) {
+	return invoke[ChainKVApplyRequest, ChainKVResponse](c, ctx, "ApplyChainKV", req)
+}
+
 func (c *Client) CreatePendingThrow(ctx context.Context, req CreatePendingThrowRequest) (PendingThrowResponse, error) {
 	return invoke[CreatePendingThrowRequest, PendingThrowResponse](c, ctx, "CreatePendingThrow", req)
 }
@@ -3790,6 +4187,59 @@ func (s *SessionClient) SetChainConfig(key, value string) error {
 func (s *SessionClient) UnsetChainConfig(key string) error {
 	_, err := invoke[ConfigRequest, EmptyResponse](s.client, s.ctx, "UnsetChainConfig", ConfigRequest{Operation: s.operation(), Key: key, Chain: s.active()})
 	return err
+}
+
+func (s *SessionClient) GetChainKV(key string) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](s.client, s.ctx, "GetChainKV", ChainKVRequest{Operation: s.operation(), Chain: s.active(), Key: key})
+}
+
+func (s *SessionClient) ListChainKV(prefix string, includeValues bool) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](s.client, s.ctx, "ListChainKV", ChainKVRequest{Operation: s.operation(), Chain: s.active(), Prefix: prefix, IncludeValues: includeValues})
+}
+
+func (s *SessionClient) ChainKVSnapshot() (operatorsession.ChainKVSnapshot, error) {
+	response, err := s.ListChainKV("", true)
+	if err != nil {
+		return operatorsession.ChainKVSnapshot{}, err
+	}
+	return operatorsession.ChainKVSnapshot{Revision: response.Revision, Entries: response.Entries}, nil
+}
+
+func (s *SessionClient) ChainKVSnapshotFor(chain string) (operatorsession.ChainKVSnapshot, error) {
+	response, err := s.client.ListChainKV(s.ctx, ChainKVRequest{Operation: s.operation(), Chain: chain, IncludeValues: true})
+	if err != nil {
+		return operatorsession.ChainKVSnapshot{}, err
+	}
+	return operatorsession.ChainKVSnapshot{Revision: response.Revision, Entries: response.Entries}, nil
+}
+
+func (s *SessionClient) ApplyChainKV(expectedRevision *uint64, mutations []operatorsession.ChainKVMutation) (operatorsession.ChainKVSnapshot, error) {
+	if expectedRevision == nil {
+		if len(mutations) != 1 {
+			return operatorsession.ChainKVSnapshot{}, errors.New("unconditional chain kv updates require one mutation")
+		}
+		mutation := mutations[0]
+		var response ChainKVResponse
+		var err error
+		if mutation.Operation == "delete" {
+			response, err = s.DeleteChainKV(mutation.Key, nil)
+		} else {
+			response, err = s.SetChainKV(mutation.Key, mutation.Value, nil)
+		}
+		return operatorsession.ChainKVSnapshot{Revision: response.Revision}, err
+	}
+	response, err := invoke[ChainKVApplyRequest, ChainKVResponse](s.client, s.ctx, "ApplyChainKV", ChainKVApplyRequest{
+		Operation: s.operation(), Chain: s.active(), ExpectedRevision: *expectedRevision, Mutations: mutations,
+	})
+	return operatorsession.ChainKVSnapshot{Revision: response.Revision}, err
+}
+
+func (s *SessionClient) SetChainKV(key, value string, expectedRevision *uint64) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](s.client, s.ctx, "SetChainKV", ChainKVRequest{Operation: s.operation(), Chain: s.active(), Key: key, Value: value, ExpectedRevision: expectedRevision})
+}
+
+func (s *SessionClient) DeleteChainKV(key string, expectedRevision *uint64) (ChainKVResponse, error) {
+	return invoke[ChainKVRequest, ChainKVResponse](s.client, s.ctx, "DeleteChainKV", ChainKVRequest{Operation: s.operation(), Chain: s.active(), Key: key, ExpectedRevision: expectedRevision})
 }
 
 func (s *SessionClient) SetTargetConfig(target, key, value string) error {

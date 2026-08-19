@@ -254,7 +254,7 @@ Shared fixtures and the `PayloadExpectation` registry live in `conftest.py`.
 
 ### D10: Debug Builds Are Out of Scope
 
-Debug vs. release is an orthogonal axis (ADR-024). This test suite runs against whatever blobs are staged in `_blobs/`. To test debug builds, the developer runs `task stage -- --debug` then `task test`. The pytest suite does not distinguish build modes.
+Debug vs. release is an orthogonal axis (ADR-024). This test suite runs against whatever blobs are staged in `_blobs/`. To test debug builds, the developer runs `aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs -- --debug` then `aspect test`. The pytest suite does not distinguish build modes.
 
 **Rationale**: Debug builds add PIC_LOG output to stderr but don't change functional behavior. Asserting on PIC_LOG presence/absence is a debug tooling concern, not a payload correctness concern.
 

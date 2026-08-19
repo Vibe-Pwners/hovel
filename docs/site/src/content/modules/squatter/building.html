@@ -5,21 +5,21 @@
           Build Squatter from the repository root integration workspace. The
           aggregate module build covers the Go provider, the selected Windows PE
           payload, and the source module targets that do not require a dedicated
-          Wine runtime. Use Task targets so local and CI Bazel configuration is
+          Wine runtime. Use Aspect commands so local and CI Bazel configuration is
           applied consistently.
         </p>
 
         <h2>Primary Build</h2>
-<pre data-lang="shell"><code>task modules:build
-task bazel:build -- //:modules_build
-task bazel:build -- //modules/squatter:build</code></pre>
+<pre data-lang="shell"><code>aspect hovel-check modules
+aspect build //:modules_build
+aspect build //modules/squatter:build</code></pre>
 
         <h2>Focused Targets</h2>
-<pre data-lang="shell"><code>task bazel:build -- //modules/squatter/provider:squatter-provider
-task bazel:build -- //modules/squatter/provider:squatter-generate
-task bazel:build -- //modules/squatter/windows:squatter_x86_exe
-task bazel:build -- //modules/squatter/windows/src:squatter_all
-task bazel:build -- //modules/squatter/client/cmd/squatterctl:squatterctl</code></pre>
+<pre data-lang="shell"><code>aspect build //modules/squatter/provider:squatter-provider
+aspect build //modules/squatter/provider:squatter-generate
+aspect build //modules/squatter/windows:squatter_x86_exe
+aspect build //modules/squatter/windows/src:squatter_all
+aspect build //modules/squatter/client/cmd/squatterctl:squatterctl</code></pre>
 
         <h2>Windows Payload</h2>
         <p>
@@ -58,6 +58,6 @@ task bazel:build -- //modules/squatter/client/cmd/squatterctl:squatterctl</code>
           under <code>modules/examples/bin</code>, then writes package archives,
           indexes, install sets, and checksums under <code>dist/modules</code>.
         </p>
-<pre data-lang="shell"><code>task release:modules-stage
-task release:modules-package</code></pre>
+<pre data-lang="shell"><code>aspect hovel-release modules
+aspect hovel-release modules</code></pre>
       </article>

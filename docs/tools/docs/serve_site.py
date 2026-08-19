@@ -18,7 +18,7 @@ def main() -> int:
     workspace = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", Path.cwd())).resolve()
     site = args.site if args.site.is_absolute() else workspace / args.site
     if not (site / "index.html").is_file():
-        raise SystemExit(f"missing materialized docs site: {site}; run `task docs:build`")
+        raise SystemExit(f"missing materialized docs site: {site}; run `aspect run //docs/tools/docs:stage_site`")
 
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(site))
     server = ThreadingHTTPServer((args.host, args.port), handler)

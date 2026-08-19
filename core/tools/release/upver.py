@@ -121,6 +121,14 @@ def sync(root: Path, version: str) -> None:
         r'(\[\[package\]\]\nname = "hovel-sdk"\nversion = ")[^"]+(")',
         rf"\g<1>{version}\2",
     )
+    replace_one(root / "agent" / ".claude-plugin" / "plugin.json", r'("version": ")[^"]+(")', rf"\g<1>{version}\2")
+    major, minor, _patch = (int(part) for part in version.split("."))
+    minimum = f"{major}.{minor}.0"
+    maximum = f"{major}.{minor + 1}.0" if major == 0 else f"{major + 1}.0.0"
+    for skill in sorted((root / "agent" / "skills").glob("*/SKILL.md")):
+        replace_one(skill, r"compatibility: Requires Hovel [^\n]+", f"compatibility: Requires Hovel {major}.{minor}.x and a configured Hovel MCP server.")
+        replace_one(skill, r'(hovel-min-version: ")[^"]+(")', rf"\g<1>{minimum}\2")
+        replace_one(skill, r'(hovel-max-version: ")[^"]+(")', rf"\g<1>{maximum}\2")
 
 
 def replace_one(path: Path, pattern: str, replacement: str) -> None:

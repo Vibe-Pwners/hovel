@@ -5,29 +5,29 @@
         <p>Hovel tests contracts first. The main risk is not only that a function breaks; it is that CLI, one-shot execution, MCP, daemon RPC, module hosts, storage, and SDKs disagree about the same operation, chain, throw, provider, payload, session, artifact, or event.</p>
 
         <h2>Local Gates</h2>
-        <p>All checks run through <a href="https://taskfile.dev/">Task</a>. For sparse checkout work, use the available-slice gate:</p>
-<pre data-lang="bash"><code>task checkout:status
-task check
+        <p>All checks run through <a href="https://aspect.build/docs/cli/">Aspect CLI</a>. For sparse checkout work, use the appropriate scoped gate:</p>
+<pre data-lang="bash"><code>python3 repo-tools/tasks/checkout.py status
+aspect hovel-check
 </code></pre>
-        <p><code>task check</code> detects the repository slices present in the checkout and runs their slice checks. Missing optional slices are reported as skipped. Real failures in present slices still fail the task.</p>
+        <p><code>aspect hovel-check</code> detects the repository slices present in the checkout and runs their slice checks. Missing optional slices are reported as skipped. Real failures in present slices still fail the task.</p>
         <p>The full local gate is:</p>
-<pre data-lang="bash"><code>task ci
+<pre data-lang="bash"><code>aspect hovel-check
 </code></pre>
-        <p><code>task ci</code> first requires a full checkout. It then runs repository policy, lint, version-updater tests, remote-compatible docs verification, build, tests, the Go race gate, fuzz smoke, and coverage ratchets. Go compilation also runs Bazel-native <code>nogo</code> analysis, including nilness checks, across core, SDK, and module targets.</p>
-        <p>VHS rendering is an explicit host-service boundary. The <code>task docs:demos</code>, <code>task docs:demos:wine</code>, and <code>task docs:demos:all</code> refresh commands drive tmux and Chrome, optionally Docker for Wine, and replace the reviewed GIFs under <code>docs/site/public/assets/demos/</code>. Normal docs gates consume those checked-in assets, so <code>task docs:check</code>, <code>task docs:build</code>, and <code>task docs:ci</code> remain deterministic and remote-compatible.</p>
+        <p><code>aspect hovel-check</code> first requires a full checkout. It then runs repository policy, lint, version-updater tests, remote-compatible docs verification, build, tests, the Go race gate, fuzz smoke, and coverage ratchets. Go compilation also runs Bazel-native <code>nogo</code> analysis, including nilness checks, across core, SDK, and module targets.</p>
+        <p>VHS rendering is an explicit host-service boundary. The <code>aspect run //docs/tools/demo:materialize_docs_demo_outputs</code>, <code>aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs</code>, and <code>aspect run //docs/tools/demo:materialize_all_demo_outputs</code> refresh commands drive tmux and Chrome, optionally Docker for Wine, and replace the reviewed GIFs under <code>docs/site/public/assets/demos/</code>. Normal docs gates consume those checked-in assets, so <code>aspect hovel-check docs</code>, <code>aspect run //docs/tools/docs:stage_site</code>, and <code>aspect hovel-check docs</code> remain deterministic and remote-compatible.</p>
 
         <h2>CI Gate</h2>
-        <p>The repository split changed the CI shape. The local and hosted gates are modular but Task-backed:</p>
+        <p>The repository split changed the CI shape. The local and hosted gates are modular but Aspect-backed:</p>
         <ol>
-          <li><code>core</code>: <code>task build</code>, <code>task test</code>, race tests, fuzz smoke, lint, and coverage for the core workspace.</li>
-          <li><code>sdk</code>: <code>task sdk:ci</code> builds and tests the Go, Python, and Rust SDK slices.</li>
-          <li><code>modules</code>: <code>task modules:ci</code> builds and tests in-repo examples, Squatter provider code, module packaging checks, and workspace install behavior, then <code>task release:modules-package</code> verifies the module package/index release path.</li>
-          <li><code>docs</code>: <code>task docs:check</code> tests and assembles the complete declared site, including generated SDK API pages and internal link validation; <code>task docs:report</code> materializes the same site with current test evidence.</li>
-          <li><code>squatter-wine</code>: installs Wine in CI, then runs <code>task modules:wine-test</code> and <code>task docs:demos:wine</code>.</li>
+          <li><code>core</code>: <code>aspect build</code>, <code>aspect test</code>, race tests, fuzz smoke, lint, and coverage for the core workspace.</li>
+          <li><code>sdk</code>: <code>aspect hovel-check sdk</code> builds and tests the Go, Python, and Rust SDK slices.</li>
+          <li><code>modules</code>: <code>aspect hovel-check modules</code> builds and tests in-repo examples, Squatter provider code, module packaging checks, and workspace install behavior, then <code>aspect hovel-release modules</code> verifies the module package/index release path.</li>
+          <li><code>docs</code>: <code>aspect hovel-check docs</code> tests and assembles the complete declared site, including generated SDK API pages and internal link validation; <code>aspect hovel-report</code> materializes the same site with current test evidence.</li>
+          <li><code>squatter-wine</code>: installs Wine in CI, then runs <code>aspect hovel-check modules</code> and <code>aspect run //docs/tools/demo:materialize_squatter_wine_demo_outputs</code>.</li>
         </ol>
         <p>CI, Pages, and publish jobs append GitHub Actions job summaries with the commands they ran, coverage ratchets, generated artifacts, staged site statistics, or publish targets where those details apply.</p>
-        <p>Astro always publishes the <a href="../reports/tests/latest/index.html">test report application</a>. Run <code>task docs:report</code> to execute the report-producing test workflow and attach its JSON, logs, and XML to the application in <code>_site/</code>. A normal <code>task docs:build</code> deterministically publishes the same route without test evidence. The report preserves Bazel target-level evidence, suite-level rollups, per-case XML where present, assertion failure messages, captured case output, full console logs, raw XML, and undeclared outputs for drilldown across the monorepo.</p>
-        <p>Docs verification stays in the docs slice instead of becoming a dependency of every core checkout. The full aggregate <code>task ci</code> requires a complete checkout and runs the wired remote-compatible slice gates together. Hosted CI runs host-service demo rendering as a separately named step so failures cannot be confused with hermetic build or test failures.</p>
+        <p>Astro always publishes the <a href="../reports/tests/latest/index.html">test report application</a>. Run <code>aspect hovel-report</code> to execute the report-producing test workflow and attach its JSON, logs, and XML to the application in <code>_site/</code>. A normal <code>aspect run //docs/tools/docs:stage_site</code> deterministically publishes the same route without test evidence. The report preserves Bazel target-level evidence, suite-level rollups, per-case XML where present, assertion failure messages, captured case output, full console logs, raw XML, and undeclared outputs for drilldown across the monorepo.</p>
+        <p>Docs verification stays in the docs slice instead of becoming a dependency of every core checkout. The full aggregate <code>aspect hovel-check</code> requires a complete checkout and runs the wired remote-compatible slice gates together. Hosted CI runs host-service demo rendering as a separately named step so failures cannot be confused with hermetic build or test failures.</p>
 
         <h2>Test Inventory</h2>
         <p>The root Bazel test suite covers the main product surfaces:</p>
@@ -40,6 +40,8 @@ task check
           <li>Module packaging tests for in-repo example modules and workspace installation.</li>
           <li>Demo harness tests, including standard throw/session/MCP verification and the MCP agent demo harness.</li>
           <li>Shared throw-audit contract assertions reused by command mode, CLI, and MCP tests.</li>
+          <li>A real MCP transport contract invokes every canonical operator capability and compares the resulting command invocation with the independently constructed human invocation. This proves every agent route crosses the same application, daemon, policy, persistence, and audit boundary as its human counterpart.</li>
+          <li>A generated agent–human operator parity matrix that fails on command, typed-tool, advertised-capability, risk annotation, or evidence drift.</li>
           <li>A fuzz smoke target for pure domain parsing behavior.</li>
         </ol>
 
@@ -91,15 +93,15 @@ task check
         </ol>
 
         <h2>Coverage Metrics</h2>
-        <p>Coverage is a ratchet, not a vanity number. <code>task coverage</code> runs Bazel merged LCOV coverage for the Go domain and application layers through <code>task coverage:go</code>, then runs Python SDK coverage through the standard-library trace module. It writes generated reports to <code>coverage/</code>.</p>
+        <p>Coverage is a ratchet, not a vanity number. <code>aspect test --coverage</code> runs Bazel merged LCOV coverage for the Go domain and application layers through <code>aspect test --coverage:go</code>, then runs Python SDK coverage through the standard-library trace module. It writes generated reports to <code>coverage/</code>.</p>
 <pre data-lang="targets"><code>Domain ratchet: 75%
 Application ratchet: 65%
 Python SDK ratchet: 80%
 </code></pre>
-        <p>The ratchets start below the existing baselines so the gate fails on regressions without pretending the first enforced number is the long-term target. Run <code>task coverage</code> for the current measured values. The intended long-term goals remain domain 90%+, application services 85%+, Python SDK 85%+, and adapter coverage judged primarily by contract behavior rather than raw line count.</p>
+        <p>The ratchets start below the existing baselines so the gate fails on regressions without pretending the first enforced number is the long-term target. Run <code>aspect test --coverage</code> for the current measured values. The intended long-term goals remain domain 90%+, application services 85%+, Python SDK 85%+, and adapter coverage judged primarily by contract behavior rather than raw line count.</p>
 
         <h2>Stress Gates</h2>
-        <p><code>task test:race</code> runs the application service layer with the Go race detector through rules_go. <code>task fuzz:smoke</code> runs a short fuzz campaign against the domain event type parser. Both are part of <code>task ci</code> and the GitHub Actions <code>build-test</code> job.</p>
+        <p><code>aspect hovel-check core</code> runs the application service layer with the Go race detector through rules_go. <code>aspect hovel-check core</code> runs a short fuzz campaign against the domain event type parser. Both are part of <code>aspect hovel-check</code> and the GitHub Actions <code>build-test</code> job.</p>
 
         <h2>Future Coverage</h2>
         <p>New product surfaces should bring their own contract tests before becoming durable product promises:</p>

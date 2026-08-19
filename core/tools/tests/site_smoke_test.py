@@ -29,6 +29,7 @@ class PageSmokeParser(HTMLParser):
         self.has_module_directory = False
         self.has_module_document_header = False
         self.has_module_switcher = False
+        self.has_breadcrumbs = False
         self.chapter_number: str | None = None
         self.module_number: str | None = None
         self.scripts: list[str] = []
@@ -43,7 +44,7 @@ class PageSmokeParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         classes = set((attributes.get("class") or "").split())
-        if "content" in classes and tag == "main":
+        if tag == "main":
             self.has_main_content = True
         if "topbar" in classes and tag == "header":
             self.has_topbar = True
@@ -65,6 +66,8 @@ class PageSmokeParser(HTMLParser):
             self.has_module_document_header = True
         if "module-switcher" in classes:
             self.has_module_switcher = True
+        if tag == "nav" and attributes.get("aria-label") == "Breadcrumb":
+            self.has_breadcrumbs = True
         if tag == "main" and "book-chapter" in classes:
             self.chapter_number = attributes.get("data-chapter-number")
         if tag == "main" and "module-document" in classes:
@@ -154,6 +157,8 @@ def check_page(path: Path) -> str | None:
             return f"{path} is missing the generated chapter header"
         if parser.chapter_number is None or len(parser.chapter_number) != 2 or not parser.chapter_number.isdigit():
             return f"{path} has an invalid generated chapter number"
+    if ("spec" in path.parts or "modules" in path.parts) and not parser.has_breadcrumbs:
+        return f"{path} is missing breadcrumb navigation"
     if "modules" in path.parts:
         module_index = len(path.parts) - 1 - tuple(reversed(path.parts)).index("modules")
         module_route = path.parts[module_index + 1 :]

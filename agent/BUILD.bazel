@@ -1,0 +1,15 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "skills",
+    srcs = glob(["skills/**"]),
+)
+
+filegroup(
+    name = "claude_plugin",
+    srcs = [
+        ".claude-plugin/plugin.json",
+        ".mcp.json",
+        ":skills",
+    ],
+)

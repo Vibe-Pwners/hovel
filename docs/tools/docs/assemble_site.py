@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 import check_site_links
+import site_revision
 
 
 def main() -> int:
@@ -32,6 +33,7 @@ def main() -> int:
         copy_file(Path(source), args.output / destination, "demo artifacts", seen)
 
     (args.output / ".nojekyll").touch()
+    site_revision.refresh_tree(args.output)
     check_site_links.check_site(args.output)
     return 0
 

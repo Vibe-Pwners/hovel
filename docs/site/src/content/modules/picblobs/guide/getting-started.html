@@ -2,14 +2,14 @@
 <article>
   <h1 id="getting-started">Getting Started</h1>
   <p>
-    Run the commands on this page from the Hovel repository root. Task is the
+    Run the commands on this page from the Hovel repository root. Aspect CLI is the
     public build interface; it selects the pinned Bazel, Python, Rust, C, and
     cross-compilation inputs used by both local development and CI.
   </p>
 
   <h2 id="prerequisites">Prerequisites</h2>
   <ul>
-    <li><a href="https://taskfile.dev/">Task</a>, the repository entry point</li>
+    <li><a href="https://aspect.build/docs/cli/">Aspect CLI</a>, the repository entry point</li>
     <li>Bazelisk, which honors the checked-in Bazel version</li>
     <li>
       <a href="https://www.qemu.org/">QEMU user mode</a> only when executing
@@ -21,42 +21,37 @@
   <p>
     Do not install or invoke host <code>bazel</code>, <code>uv</code>,
     <code>ruff</code>, <code>clang-format</code>, or <code>clang-tidy</code> for
-    repository workflows. Task invokes hermetic Bazel targets that provide those
+    repository workflows. Aspect invokes hermetic Bazel targets that provide those
     tools. Pinned Bootlin archives supply Linux cross-compilers for x86, ARM,
     AArch64, MIPS, s390x, SPARC, PowerPC, ppc64le, and RISC-V.
   </p>
 
   <h2 id="quick-start">Quick start</h2>
   <pre data-lang="bash"><code># Verify generated sources and the declared toolchain graph
-task picblobs:setup
+aspect hovel-check modules
 
 # Build the representative platform matrix
-task picblobs:bazel-build
+aspect hovel-check modules
 
 # Build and stage all blobs, runners, and verifier fixtures
-task picblobs:stage
+aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/tools:stage_blobs --
 
 # Execute the staged catalogue through the Bazel-managed CLI
-task bazel:run -- //modules/picblobs/python_cli:picblobs-cli -- verify
+aspect run //modules/picblobs/python_cli:picblobs-cli -- verify
 
 # Run the Picblobs test suite
-task picblobs:test
+aspect hovel-check modules
 </code></pre>
   <p>
-    Use <code>task hooks:install</code> if you want the optional repository Git
-    hooks. The hooks call Task-backed checks; contributors should not invoke
+    Use <code>aspect hovel-hooks</code> if you want the optional repository Git
+    hooks. The hooks call Aspect-backed checks; contributors should not invoke
     Lefthook directly.
   </p>
 
   <h2 id="docker-podman-no-local-setup">Docker / Podman (no local setup)</h2>
   <p>
-    The optional Picblobs development container is also exposed through its
-    module Taskfile:
+    Docker or Podman is an optional host boundary rather than part of the hermetic
+    build graph. The repository's normal build, verification, and CLI paths above do
+    not require a development container.
   </p>
-  <pre data-lang="bash"><code># Interactive container shell
-task --dir modules/picblobs dev
-
-# Run a Task-backed command in the container and exit
-task --dir modules/picblobs dev -- 'task verify'
-</code></pre>
 </article>

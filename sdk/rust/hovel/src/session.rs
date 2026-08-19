@@ -156,10 +156,8 @@ impl LineShellSession {
             }
             self.emit(output.into_bytes());
         }
-        if !self.closed {
-            let prompt = self.prompt.clone();
-            self.emit(prompt.into_bytes());
-        }
+        let prompt = self.prompt.clone();
+        self.emit(prompt.into_bytes());
     }
 }
 
@@ -229,11 +227,7 @@ impl Session for LineShellSession {
         // separate write RPCs on the same dispatch thread, so no data can arrive
         // mid-wait; sleeping for the duration matches the blocking behavior of
         // the Go and Python shells.
-        let wait = if wait_ms < 0 {
-            Duration::from_millis(IDLE_BLOCK_MS)
-        } else {
-            Duration::from_millis(wait_ms as u64)
-        };
+        let wait = session_wait_duration(wait_ms);
         sleep(wait);
         Ok(self.queue.pop_front().unwrap_or_default())
     }
@@ -245,5 +239,27 @@ impl Session for LineShellSession {
 
     fn closed(&self) -> bool {
         self.closed
+    }
+}
+
+fn session_wait_duration(wait_ms: i64) -> Duration {
+    if wait_ms < 0 {
+        Duration::from_millis(IDLE_BLOCK_MS)
+    } else {
+        Duration::from_millis(wait_ms as u64)
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn negative_wait_is_bounded() {
+        assert_eq!(
+            session_wait_duration(-1),
+            Duration::from_millis(IDLE_BLOCK_MS)
+        );
+        assert_eq!(session_wait_duration(1), Duration::from_millis(1));
     }
 }

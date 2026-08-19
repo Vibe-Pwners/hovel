@@ -13,6 +13,8 @@ import (
 // bytes emitted by the frontend on output are read back from the PTY master.
 type PTYFrontend func(input io.Reader, output io.Writer) error
 
+var openPTY = openPTYPlatform
+
 // PTYSession exposes a local pseudoterminal as a raw Hovel session. It is useful
 // for modules that already have a line-oriented local client UI but should still
 // be driven over Hovel's raw byte session transport.

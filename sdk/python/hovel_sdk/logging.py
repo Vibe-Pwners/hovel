@@ -5,7 +5,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-_RESERVED = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys())
+_RESERVED = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {"asctime", "message"}
 
 
 class RPCLogHandler(logging.Handler):

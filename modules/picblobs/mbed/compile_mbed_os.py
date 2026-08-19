@@ -310,7 +310,7 @@ def validate_project(
     if missing:
         joined = ", ".join(missing)
         raise FileNotFoundError(
-            f"Mbed project is missing {joined}; run task picblobs:mbed-blobs first"
+            f"Mbed project is missing {joined}; run aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:materialize_blobs -- first"
         )
     validate_blob_configs(source_root, server_bin, client_bin)
 
@@ -354,7 +354,7 @@ def validate_blob_code(
     ):
         raise ValueError(
             f"generated Mbed {role} blob header is stale; "
-            "run task picblobs:mbed-blobs"
+            "run aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:materialize_blobs --"
         )
 
 
@@ -372,7 +372,7 @@ def validate_mbed_os(mbed_os: Path) -> None:
     if not make_py.is_file() or not version_header.is_file():
         raise FileNotFoundError(
             f"missing Mbed OS 5.15.9 source tree at {mbed_os}; "
-            "use the Task-backed Bazel target or pass --mbed-os"
+            "use the Aspect-backed Bazel target or pass --mbed-os"
         )
     validate_checkout_commit(mbed_os)
     version_text = version_header.read_text(encoding="utf-8")

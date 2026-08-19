@@ -1,0 +1,28 @@
+load(".aspect/helpers.axl", "run_aspect")
+
+def _impl(ctx: TaskContext) -> int:
+    root = ctx.std.env.aspect_root_dir()
+    workspace = ctx.std.env.var("HOVEL_WORKSPACE") or root + "/core/.hovel"
+    mode = ctx.args.mode[0]
+    commands = {
+        "cli": ["cli", "--workspace", workspace],
+        "daemon": ["daemon", "serve", "--workspace", workspace],
+        "mcp": ["mcp", "--workspace", workspace, "--transport", "http", "--http-addr", "127.0.0.1:27166", "--entity-id", "agent1"],
+        "status": ["status", "--workspace", workspace],
+        "init": ["init", "--workspace", workspace],
+        "throw": ["throw", "--workspace", workspace],
+        "session": ["session", "--workspace", workspace],
+    }
+    if mode not in commands:
+        print("unknown development mode: " + mode)
+        return 2
+    return run_aspect(ctx, ["run", "//cmd/hovel", "--"] + commands[mode] + ctx.args.hovel_args, root + "/core")
+
+hovel = task(
+    args = {
+        "mode": args.positional(minimum = 1, maximum = 1, description = "Mode: cli, daemon, mcp, status, init, throw, or session."),
+        "hovel_args": args.trailing_var_args(description = "Additional arguments forwarded to Hovel."),
+    },
+    summary = "Run Hovel development workspace operations.",
+    implementation = _impl,
+)

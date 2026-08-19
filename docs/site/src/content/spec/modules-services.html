@@ -23,9 +23,9 @@
           The in-tree examples are deliberately benign and exercise the orchestration
           surface: survey, exploit, and session modules exist in Python, Go, and Rust.
           These examples and Squatter now live in the <code>modules/</code> slice.
-          Use <code>task modules:examples:ci</code> for the examples,
-          <code>task modules:ci</code> for the complete slice, and
-          <code>task release:modules-package</code> for installable archives and indexes.
+          Use <code>aspect hovel-check modules</code> for the examples,
+          <code>aspect hovel-check modules</code> for the complete slice, and
+          <code>aspect hovel-release modules</code> for installable archives and indexes.
           These are separate from the core-only gate but compose into full-checkout CI.
           Python examples can be linked during development or packaged with a managed
           Python launcher.
@@ -74,17 +74,13 @@ step.execute(request) -&gt; StepExecuteResult
 step.cleanup(request) -&gt; StepCleanupResult
 </code></pre>
         <p>
-          Payload providers may also expose provider-specific RPC methods. The Go SDK is
-          the complete provider surface today:
+          Payload providers expose the portable
+          <a href="payload-provider-development.html"><code>hovel.payload/v1</code></a>
+          descriptor and only the independent <code>payload.*</code> operations they
+          support. Go, Python, and Rust dispatch the same v1 surface. The Go SDK also
+          retains its legacy monolithic <code>PayloadProvider</code> interface for source
+          compatibility.
         </p>
-<pre data-lang="rpc"><code>list_payloads(query) -&gt; []PayloadInfo
-resolve_payload(query) -&gt; PayloadInfo
-prepare_listener(request) -&gt; ListenerRef
-generate_payload(request) -&gt; PayloadArtifactSet
-connect_session(request) -&gt; SessionRef
-cleanup_payload(request) -&gt; CleanupResult
-read_payload_chunk(request) -&gt; PayloadChunk
-</code></pre>
         <p>
           Mesh providers follow the same module runtime path rather than a separate
           plugin system. A module can add <code>mesh.describe</code>,
@@ -106,7 +102,7 @@ read_payload_chunk(request) -&gt; PayloadChunk
           Services are long-lived capabilities in the domain model. Service descriptors
           and validation exist today; a general external service process runtime remains
           design work. Current provider behavior that operators can exercise is exposed
-          through module RPC, especially Go payload-provider modules.
+          through module RPC in all supported SDK languages.
         </p>
         <p>A future service process may be:</p>
         <ol>

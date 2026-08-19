@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build example Hovel module packages into dist/modules.
 
-Invoked through Task. Native binaries are normally supplied as Bazel runfiles;
+Invoked through Aspect CLI. Native binaries are normally supplied as Bazel runfiles;
 direct script use can still consume binaries staged under modules/examples/bin/.
 Set HOVEL_MODULE_RELEASE_BASE_URL to produce an HTTPS bulk-install manifest for
 a release, for example https://github.com/vibepwners/hovel/releases/download/v1.2.3.

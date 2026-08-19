@@ -2,8 +2,55 @@ package commands
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestHovelRegistryDefinesStableOperatorCapabilities(t *testing.T) {
+	capabilities, err := HovelRegistry(Runtime{}).OperatorCapabilities()
+	if err != nil {
+		t.Fatalf("OperatorCapabilities returned error: %v", err)
+	}
+	if got, want := len(capabilities), 107; got != want {
+		t.Fatalf("operator capability count = %d, want %d", got, want)
+	}
+	for _, capability := range capabilities {
+		if strings.TrimSpace(string(capability.ID)) == "" || len(capability.HumanRoutes) != 1 {
+			t.Fatalf("invalid operator capability: %#v", capability)
+		}
+		if capability.Summary == "" || capability.Risk == "" {
+			t.Fatalf("incomplete operator capability: %#v", capability)
+		}
+	}
+
+	ids := make([]string, 0, len(capabilities))
+	for _, capability := range capabilities {
+		ids = append(ids, string(capability.ID))
+	}
+	const wantDigest = "0f2ef76026e27e1e4ae210db60850d9d99d6c2a34246a37d23c04edd00ee193c"
+	if got := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(ids, "\n")))); got != wantDigest {
+		t.Fatalf("operator capability ID digest = %s, want %s; update the versioned parity contract deliberately", got, wantDigest)
+	}
+}
+
+func TestCapabilityIDForPathPreservesStableDomainNames(t *testing.T) {
+	tests := map[string]CapabilityID{
+		"control init":          "workspace.init",
+		"op create":             "operation.create",
+		"target set create":     "target.set.create",
+		"payloads cleanup":      "payload.cleanup",
+		"throw":                 "throw.start",
+		"confirm":               "throw.confirm",
+		"pki certificate issue": "pki.certificate.issue",
+	}
+	for path, want := range tests {
+		if got := CapabilityIDForPath(strings.Fields(path)); got != want {
+			t.Errorf("CapabilityIDForPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
 
 func TestRegistryRejectsDuplicatePaths(t *testing.T) {
 	_, err := NewRegistry(

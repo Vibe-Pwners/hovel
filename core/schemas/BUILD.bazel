@@ -8,9 +8,23 @@ filegroup(
         "hovel.chain.schema.json",
         "hovel.event.schema.json",
         "hovel.module.schema.json",
+        "hovel.payload.schema.json",
         "hovel.service.schema.json",
         "hovel.throw-plan.schema.json",
     ],
+)
+
+py_test(
+    name = "payload_schema_test",
+    size = "small",
+    srcs = [
+        "payload_schema_test.py",
+        "schema_smoke_test.py",
+    ],
+    args = ["$(location hovel.payload.schema.json)"],
+    data = ["hovel.payload.schema.json"],
+    imports = ["."],
+    python_version = "PY3",
 )
 
 py_test(

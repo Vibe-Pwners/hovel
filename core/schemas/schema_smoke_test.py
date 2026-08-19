@@ -114,6 +114,16 @@ def schema_kind(schema):
 def validate(value, schema, root, path):
     if "$ref" in schema:
         schema = resolve_ref(root, schema["$ref"])
+    if "oneOf" in schema:
+        matches = 0
+        for candidate in schema["oneOf"]:
+            try:
+                validate(value, candidate, root, path)
+            except AssertionError:
+                continue
+            matches += 1
+        if matches != 1:
+            raise AssertionError(f"{path}: expected exactly one matching schema, got {matches}")
     if "const" in schema and value != schema["const"]:
         raise AssertionError(f"{path}: {value!r} != const {schema['const']!r}")
     if "enum" in schema and value not in schema["enum"]:
@@ -136,6 +146,7 @@ def validate_type(value, expected, path):
         "object": lambda v: isinstance(v, dict),
         "array": lambda v: isinstance(v, list),
         "string": lambda v: isinstance(v, str),
+        "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
     }
     if expected not in checks:
         raise AssertionError(f"{path}: unsupported schema type {expected!r}")
@@ -150,9 +161,12 @@ def validate_object(value, schema, root, path):
             raise AssertionError(f"{path}: missing required key {key!r}")
 
     properties = schema.get("properties", {})
+    property_names = schema.get("propertyNames")
     additional = schema.get("additionalProperties", True)
     for key, item in value.items():
         item_path = f"{path}.{key}"
+        if property_names is not None:
+            validate(key, property_names, root, item_path)
         if key in properties:
             validate(item, properties[key], root, item_path)
         elif isinstance(additional, dict):
@@ -167,6 +181,10 @@ def validate_array(value, schema, root, path):
     if "items" in schema:
         for index, item in enumerate(value):
             validate(item, schema["items"], root, f"{path}[{index}]")
+    if schema.get("uniqueItems"):
+        encoded = [json.dumps(item, sort_keys=True) for item in value]
+        if len(encoded) != len(set(encoded)):
+            raise AssertionError(f"{path}: array items must be unique")
 
 
 def resolve_ref(root, ref):

@@ -43,16 +43,16 @@ fn main() { hovel::serve(MyModule); }</code></pre>
           artifacts, interactive sessions, installed-payload result descriptors, all
           optional Mesh methods, all five typed credential-provider methods, and
           authenticated TCP/UDP Mesh bridge clients. It does not dispatch the generic
-          <code>step.*</code> methods or the full payload-provider RPC surface available
-          in Go.
+          <code>step.*</code> methods. It does dispatch the portable
+          <a href="payload-provider-development.html"><code>hovel.payload/v1</code></a>
+          payload-provider surface.
         </p>
         <p>
           Use Rust today for standalone survey or exploit modules where a compiled,
           dependency-free SDK binary is valuable, including Mesh and credential-aware
-          providers and modules that return installed-payload descriptors from
-          <code>run</code>. Use Go for payload-provider discovery, generation,
-          reconnect, and cleanup RPC. Use Go or Python for capability-native
-          <code>step.*</code> providers.
+          providers, payload providers, and modules that return installed-payload
+          descriptors from <code>run</code>. Use Go or Python when the module also
+          requires capability-native <code>step.*</code> dispatch.
         </p>
 
         <h2>TLS, workspace PKI, and Mesh bridges</h2>
@@ -165,6 +165,41 @@ fn main() { hovel::serve(MockSurvey); }</code></pre>
           conversions.
         </p>
 
+        <h2>Pass survey findings to a later module</h2>
+        <p>
+          Override <code>chain_kv_contract</code>, then use the run context for
+          revision-bound string reads and mutations.
+        </p>
+<pre data-lang="rust"><code>fn chain_kv_contract(&amp;self) -&gt; Option&lt;ChainKVContract&gt; {
+    Some(ChainKVContract {
+        produces: vec![ChainKVBinding {
+            key: "survey/{target}/port".into(),
+            description: "Discovered service port".into(),
+            ..ChainKVBinding::default()
+        }],
+        ..ChainKVContract::default()
+    })
+}
+
+if ctx.chain_kv.available() {
+    if let Err(err) = ctx.chain_kv.set("survey/{target}/port", "8443") {
+        return Outcome::failed(&amp;err);
+    }
+}</code></pre>
+<pre data-lang="rust"><code>let (port, source) = ctx
+    .resolve_input("target.port", "survey/{target}/port")
+    .unwrap_or(("unknown".into(), "default"));
+ctx.info("resolved exploit port", &amp;[
+    ("port", Value::from(port.as_str())),
+    ("source", Value::from(source)),
+]);</code></pre>
+        <p>
+          Consumers declare the corresponding required <code>ChainKVBinding</code> with
+          <code>config_key: Some("target.port".into())</code>. Explicit invocation, target,
+          and chain configuration wins over KV data. See
+          <a href="chain-kv.html">Chain KV Handoffs</a>.
+        </p>
+
         <h2>Findings and artifacts</h2>
         <p>The <code>Outcome</code> builder chains with <code>with_*</code> methods.</p>
 <pre data-lang="rust"><code>fn run(&amp;self, ctx: &amp;mut Context) -&gt; Outcome {
@@ -266,9 +301,9 @@ fn info_is_a_rust_exploit() {
 }</code></pre>
 <p>
           The Rust SDK and in-repo Rust examples now live outside the core Bazel
-          workspace. Validate them through <code>task sdk:test</code>,
-          <code>task sdk:ci</code>, <code>task modules:examples:test</code>, and
-          <code>task modules:examples:ci</code>; the Task-backed targets remain hermetic.
+          workspace. Validate them through <code>aspect hovel-check sdk</code>,
+          <code>aspect hovel-check sdk</code>, <code>aspect hovel-check modules</code>, and
+          <code>aspect hovel-check modules</code>; the Aspect-backed targets remain hermetic.
         </p>
         <p>
           For real exploit work, keep parsers, packet builders, state machines, and
@@ -279,11 +314,11 @@ fn info_is_a_rust_exploit() {
         <h2>Build, package, and run</h2>
         <p>
           Rust examples are part of the <code>modules/</code> slice after the
-          partial-checkout split. Use <code>task modules:examples:ci</code> for the
-          language examples, <code>task modules:ci</code> for the full module slice,
-          and <code>task release:modules-package</code> for installable archives. These
-          remain separate from the core-only <code>task build</code> gate while
-          <code>task ci</code> composes them in a full checkout.
+          partial-checkout split. Use <code>aspect hovel-check modules</code> for the
+          language examples, <code>aspect hovel-check modules</code> for the full module slice,
+          and <code>aspect hovel-release modules</code> for installable archives. These
+          remain separate from the core-only <code>aspect build</code> gate while
+          <code>aspect hovel-check</code> composes them in a full checkout.
         </p>
 <pre data-lang="modules/examples/rust/mock_survey/BUILD.bazel"><code>rust_binary(
     name = "mock-survey-rust",
@@ -305,7 +340,7 @@ launch:
       arch: amd64
     command: ["bin/linux-amd64/mock-survey-rust"]</code></pre>
 <pre data-lang="shell"><code>hovel module install --link "$PWD/modules/examples/rust/mock_survey"
-task start
+aspect hovel cli
 hovel&gt; module installed   # ... mock-survey-rust, mock-exploit-rust, mock-exploit-session-rust</code></pre>
         <p>
           That completes the trio: the same three modules in

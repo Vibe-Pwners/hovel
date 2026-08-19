@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//:__subpackages__"])
+
+go_library(
+    name = "agentintegration",
+    srcs = ["installer.go"],
+    importpath = "github.com/vibepwners/hovel/internal/infra/agentintegration",
+    deps = ["//internal/app/agentintegration"],
+)
+
+go_test(
+    name = "agentintegration_test",
+    srcs = ["installer_test.go"],
+    embed = [":agentintegration"],
+    tags = ["unit"],
+    deps = ["//internal/app/agentintegration"],
+)

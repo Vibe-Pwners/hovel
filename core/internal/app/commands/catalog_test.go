@@ -299,6 +299,7 @@ func TestThrowHandlerUsesDaemonSocket(t *testing.T) {
 		t.Fatal("throw start timestamp was not propagated to run request")
 	}
 	recorder.requests[0].ThrowStarted = ""
+	recorder.requests[0].ThrowID = ""
 	if !reflect.DeepEqual(recorder.requests[0], RunMockExploitRequest{Operation: operatorsession.DefaultOperation, Chain: "mock-exploit", ModuleID: "mock-exploit@v0.0.0-example", Target: "mock://target", ChainConfig: map[string]string{}, TargetConfig: map[string]string{}}) {
 		t.Fatalf("run request = %#v", recorder.requests[0])
 	}
@@ -1314,6 +1315,7 @@ func TestThrowChainFileUsesFileConfigWithoutSessionMutation(t *testing.T) {
 		TargetConfig: map[string]string{"target.host": "router-01", "target.port": "22"},
 	}
 	recorder.requests[0].ThrowStarted = ""
+	recorder.requests[0].ThrowID = ""
 	if !reflect.DeepEqual(recorder.requests[0], wantRequest) {
 		t.Fatalf("run request = %#v, want %#v", recorder.requests[0], wantRequest)
 	}
@@ -4980,6 +4982,7 @@ func TestThrowActiveChainExecutesConfiguredSteps(t *testing.T) {
 		t.Fatal("throw start timestamp was not propagated to run request")
 	}
 	recorder.requests[0].ThrowStarted = ""
+	recorder.requests[0].ThrowID = ""
 	if !reflect.DeepEqual(recorder.requests[0], want) {
 		t.Fatalf("run request = %#v, want %#v", recorder.requests[0], want)
 	}

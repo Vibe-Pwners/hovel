@@ -17,6 +17,36 @@ publish_file = rule(
     },
 )
 
+def _site_revision_impl(ctx):
+    revision = ctx.actions.declare_file(ctx.attr.revision_output)
+    client = ctx.actions.declare_file(ctx.attr.client_output)
+    args = ctx.actions.args()
+    args.add("--revision-output", revision)
+    args.add("--client-output", client)
+    for source in ctx.files.sources:
+        args.add("--source")
+        args.add(source.short_path + "=" + source.path)
+    ctx.actions.run(
+        executable = ctx.executable.generator,
+        arguments = [args],
+        inputs = depset(ctx.files.sources),
+        outputs = [revision, client],
+        tools = depset(transitive = _runfiles(ctx.attr.generator)),
+        mnemonic = "DocsSiteRevision",
+        progress_message = "Generating documentation live-refresh revision %{label}",
+    )
+    return [DefaultInfo(files = depset([revision, client]))]
+
+site_revision = rule(
+    implementation = _site_revision_impl,
+    attrs = {
+        "client_output": attr.string(mandatory = True),
+        "generator": attr.label(executable = True, cfg = "exec", mandatory = True),
+        "revision_output": attr.string(mandatory = True),
+        "sources": attr.label_list(allow_files = True, mandatory = True),
+    },
+)
+
 def _runfiles(target):
     info = target[DefaultInfo]
     return [

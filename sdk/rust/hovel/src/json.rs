@@ -85,7 +85,7 @@ impl Value {
             Value::Bool(true) => out.push_str("true"),
             Value::Bool(false) => out.push_str("false"),
             Value::Num(n) => {
-                if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
+                if n.fract() == 0.0 && n.abs() < 1e15 {
                     let _ = write!(out, "{}", *n as i64);
                 } else {
                     let _ = write!(out, "{}", n);

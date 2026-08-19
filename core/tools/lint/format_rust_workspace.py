@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -70,7 +71,10 @@ def runfiles_root(workspace: Path) -> Path:
 def resolve_tool(root: Path, path: Path) -> str:
     if path.is_absolute() and path.exists():
         return str(path)
-    for candidate in (root / path, Path.cwd() / path):
+    runfiles = Path(str(Path(sys.argv[0])) + ".runfiles") / "_main"
+    main_roots = [parent for parent in Path(__file__).parents if parent.name == "_main"]
+    candidates = [runfiles / path, *(main_root / path for main_root in main_roots), root / path, Path.cwd() / path]
+    for candidate in candidates:
         if candidate.exists():
             return str(candidate)
     raise SystemExit(f"missing Bazel-provided rustfmt: {path}")

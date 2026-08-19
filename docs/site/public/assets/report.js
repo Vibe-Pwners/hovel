@@ -23,7 +23,7 @@
       selectFromHash();
     })
     .catch(() => {
-      app.innerHTML = `<p class="empty-state">No generated test evidence is attached to this site build. Run <code>task docs:report</code> to create it.</p>`;
+      app.innerHTML = `<p class="empty-state">No generated test evidence is attached to this site build. Run <code>aspect hovel-report</code> to create it.</p>`;
     });
 
   function renderMetadata(report) {
@@ -76,6 +76,7 @@
       </section>
       <section class="report-panel" id="report-panel-coverage" role="tabpanel" aria-labelledby="report-tab-coverage" data-report-panel="coverage" hidden>
         ${renderCoverage(report)}
+        ${renderOperatorParity(report)}
       </section>
       <section class="report-panel" id="report-panel-suites" role="tabpanel" aria-labelledby="report-tab-suites" data-report-panel="suites" hidden>
         ${renderSuiteBreakdown(report)}
@@ -143,8 +144,8 @@
       });
       button.addEventListener("keydown", (event) => {
         let next = index;
-        if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
-        else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + tabs.length) % tabs.length;
         else if (event.key === "Home") next = 0;
         else if (event.key === "End") next = tabs.length - 1;
         else return;
@@ -183,7 +184,7 @@
   function renderLinters(report) {
     const linters = report.linters || [];
     if (!linters.length) {
-      return `<p class="empty-state">No linter evidence was attached to this report. Run <code>task lint:report</code> to create it.</p>`;
+      return `<p class="empty-state">No linter evidence was attached to this report. Run <code>aspect hovel-report</code> to create it.</p>`;
     }
     const passed = linters.filter((tool) => tool.status === "PASSED").length;
     const failed = linters.filter((tool) => tool.status === "FAILED").length;
@@ -194,7 +195,7 @@
           <div>
             <span class="panel-kicker">Source quality evidence</span>
             <h2>Linters and static analysis</h2>
-            <p>Every wired tool, its detected source-level ignore statements, and complete Task-backed output.</p>
+            <p>Every wired tool, its detected source-level ignore statements, and complete Aspect-backed output.</p>
           </div>
           <span class="result-count">${linters.length} tools</span>
         </div>
@@ -224,7 +225,7 @@
         </summary>
         <div class="linter-body">
           <div class="linter-commands">
-            <h3>Task-backed invocation</h3>
+            <h3>Aspect-backed invocation</h3>
             ${commands.map((command) => `<code>${escapeHtml(command)}</code>`).join("")}
           </div>
           ${renderLinterIgnores(ignores)}
@@ -279,13 +280,15 @@
           <div>
             <span class="panel-kicker">Quality thresholds</span>
             <h2>Test coverage</h2>
-            <p>Ratchet-backed line metrics and the real-payload Squatter feature matrix.</p>
+            <p>Line and branch metrics with language, platform, and raw evidence provenance.</p>
           </div>
           <span class="result-count">${coverage.length} metrics</span>
         </div>
         <div class="coverage-grid">
           ${coverage.map((item) => {
             const percentage = Math.max(0, Math.min(100, Number(item.percentage || 0)));
+            const metricType = item.metric_type || "line";
+            const provenance = [item.language, ...(item.platforms || [])].filter(Boolean).join(" · ");
             const source = item.source_path
               ? `<a href="${escapeHtml(item.source_path)}">source evidence</a>`
               : `<span>source unavailable</span>`;
@@ -295,16 +298,57 @@
                   <span class="coverage-scope">${escapeHtml(item.scope)}</span>
                   ${statusBadge(item.status)}
                 </div>
-                <h3>${escapeHtml(item.name)}</h3>
+                <h3>${escapeHtml(item.name)} <small>${escapeHtml(metricType)}</small></h3>
                 <strong>${percentage.toFixed(2)}%</strong>
                 <div class="coverage-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}">
                   <span style="width: ${percentage}%"></span>
                 </div>
-                <p>${Number(item.covered || 0)} / ${Number(item.total || 0)} covered · minimum ${Number(item.minimum || 0).toFixed(2)}% · ${source}</p>
+                <p>${Number(item.covered || 0)} / ${Number(item.total || 0)} covered · minimum ${Number(item.minimum || 0).toFixed(2)}%${provenance ? ` · ${escapeHtml(provenance)}` : ""} · ${source}</p>
               </article>
             `;
           }).join("")}
         </div>
+      </section>
+    `;
+  }
+
+  function renderOperatorParity(report) {
+    const parity = report.operator_parity;
+    if (!parity) {
+      return "";
+    }
+    const totals = parity.totals || {};
+    const rows = (parity.capabilities || []).map((capability) => {
+      const tools = (capability.agentRoutes || []).map((route) => route.tool).join(", ") || capability.fallbackTool || "missing";
+      return `
+        <tr>
+          <td><code>${escapeHtml(capability.id)}</code></td>
+          <td>${escapeHtml((capability.humanRoutes || []).join(", "))}</td>
+          <td>${escapeHtml(tools)}</td>
+          <td>${escapeHtml(capability.risk || "")}</td>
+          <td>${escapeHtml(capability.status || "")}</td>
+        </tr>
+      `;
+    }).join("");
+    return `
+      <section class="suite-breakdown operator-parity">
+        <div class="section-heading">
+          <div>
+            <span class="panel-kicker">Operator contract</span>
+            <h2>Operator interface parity</h2>
+            <p>Human CLI capabilities and their typed agent routes, generated from the same application registry.</p>
+          </div>
+          <span class="result-count">${Number(totals.capabilities || 0)} capabilities</span>
+        </div>
+        <section class="summary-grid" aria-label="Operator parity summary">
+          ${metric("Reachable", `${Number(totals.reachabilityPercentage || 0).toFixed(1)}%`)}
+          ${metric("Typed MCP", `${Number(totals.typedPercentage || 0).toFixed(1)}%`)}
+          ${metric("Semantic contracts", `${Number(totals.contractPercentage || 0).toFixed(1)}%`)}
+        </section>
+        <table>
+          <thead><tr><th>Capability</th><th>Human route</th><th>Agent route</th><th>Risk</th><th>Level</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
       </section>
     `;
   }
@@ -486,7 +530,7 @@
         ${statusBadge(target.status)}
       </div>
       <p class="detail-meta">${escapeHtml(target.suite)} · ${escapeHtml(target.language)} · attempt ${target.attempts} · run ${target.run} · shard ${target.shard}</p>
-      <p><code>task test -- ${escapeHtml(target.label)}</code></p>
+      <p><code>aspect test ${escapeHtml(target.label)}</code></p>
       <div class="tabs" role="tablist" aria-label="Target evidence">
         ${detailTab("log", "Log")}
         ${detailTab("cases", `Cases (${target.cases.length})`)}

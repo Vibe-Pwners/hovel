@@ -39,6 +39,7 @@
 pub mod base64;
 pub mod json;
 
+mod chain_kv;
 mod context;
 mod credential_delivery;
 mod credential_provider;
@@ -46,6 +47,7 @@ mod framing;
 mod mesh;
 mod mesh_bridge;
 mod module;
+mod payload;
 mod result;
 mod server;
 mod session;
@@ -54,6 +56,7 @@ mod sha256;
 #[cfg(test)]
 mod tests;
 
+pub use chain_kv::{ChainKV, ChainKVBinding, ChainKVContract};
 pub use context::Context;
 pub use credential_delivery::{
     CredentialConsumerType, CredentialDeliveryCapability, CredentialDeliveryDescriptor,
@@ -92,6 +95,10 @@ pub use mesh_bridge::{
     MeshBridgeConnection, MeshBridgeEndpoint, MeshBridgeNetwork, ParseMeshBridgeNetworkError,
 };
 pub use module::{Info, Module, ModuleType, Requirement, Schema};
+pub use payload::{
+    PayloadArtifactV1, PayloadContent, PayloadLoadContract, PayloadProviderDescriptor,
+    PayloadTarget, PayloadVariant, PAYLOAD_SCHEMA_V1,
+};
 pub use result::{Artifact, Finding, InstalledPayloadDescriptor, Outcome, PayloadProviderRecord};
 pub use server::{serve, serve_with};
 pub use session::{

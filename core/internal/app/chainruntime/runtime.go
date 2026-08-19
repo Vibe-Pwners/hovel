@@ -158,6 +158,9 @@ func (r Runtime) Execute(ctx context.Context, req Request) (result Result, err e
 		if err != nil {
 			return Result{Status: "failed", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, err
 		}
+		if err := validateProducedCapabilities(module.ID, step, prepared.PlannedOutputs); err != nil {
+			return Result{Status: "failed", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, err
+		}
 		evidence = append(evidence, prepared.Evidence...)
 		agentHints = append(agentHints, prepared.AgentHints...)
 		capabilities = upsertCapabilities(capabilities, prepared.PlannedOutputs)
@@ -176,6 +179,12 @@ func (r Runtime) Execute(ctx context.Context, req Request) (result Result, err e
 		if err != nil {
 			return Result{Status: "failed", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, err
 		}
+		if err := validateProducedCapabilities(module.ID, step, executed.Capabilities); err != nil {
+			return Result{Status: "failed", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, err
+		}
+		if err := validateTransitions(capabilities, executed.StateTransitions); err != nil {
+			return Result{Status: "failed", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, err
+		}
 		evidence = append(evidence, executed.Evidence...)
 		agentHints = append(agentHints, executed.AgentHints...)
 		sessions = append(sessions, cloneSessions(executed.Sessions)...)
@@ -187,6 +196,45 @@ func (r Runtime) Execute(ctx context.Context, req Request) (result Result, err e
 		}
 	}
 	return Result{Status: "succeeded", Capabilities: capabilities, Evidence: evidence, Sessions: sessions, InstalledPayloads: installedPayloads, AgentHints: agentHints}, nil
+}
+
+func validateProducedCapabilities(moduleID string, step modulecatalog.StepContract, capabilities []modulecatalog.Capability) error {
+	for _, capability := range capabilities {
+		declared := false
+		for _, requirement := range step.Produces {
+			if modulecatalog.CapabilitySatisfiesRequirement(capability, requirement) {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			return fmt.Errorf("module %s step %s returned undeclared capability %s (%s)", moduleID, step.ID, capability.ID, capability.Type)
+		}
+		if capability.ProducerStepID != "" && capability.ProducerStepID != step.ID {
+			return fmt.Errorf("module %s step %s returned capability %s owned by step %s", moduleID, step.ID, capability.ID, capability.ProducerStepID)
+		}
+	}
+	return nil
+}
+
+func validateTransitions(capabilities []modulecatalog.Capability, transitions []CapabilityTransition) error {
+	for _, transition := range transitions {
+		found := false
+		for _, capability := range capabilities {
+			if capability.ID != transition.CapabilityID {
+				continue
+			}
+			found = true
+			if transition.From != "" && transition.From != capability.State {
+				return fmt.Errorf("capability %s transition expected state %s, current state is %s", transition.CapabilityID, transition.From, capability.State)
+			}
+			break
+		}
+		if !found {
+			return fmt.Errorf("capability transition references unknown capability %s", transition.CapabilityID)
+		}
+	}
+	return nil
 }
 
 func (r Runtime) resolveStep(ref StepRef) (modulecatalog.Module, modulecatalog.StepContract, error) {

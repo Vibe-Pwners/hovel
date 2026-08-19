@@ -2,9 +2,9 @@
 """Update picblobs package versions across release-critical files.
 
 Usage:
-    python tools/update_version.py 0.2.0
-    python tools/update_version.py v0.2.0 --dry-run
-    python tools/update_version.py 0.2.0 --check
+    aspect run //modules/picblobs/tools:update_version -- 0.2.0
+    aspect run //modules/picblobs/tools:update_version -- v0.2.0 --dry-run
+    aspect run //modules/picblobs/tools:update_version -- 0.2.0 --check
 """
 
 from __future__ import annotations
@@ -116,16 +116,6 @@ VERSION_TARGETS: tuple[VersionTarget, ...] = (
         re.compile(
             r'(?m)^(\[\[package\]\]\nname = "picblobs"\nversion = ")([^"]+)(")$'
         ),
-    ),
-    VersionTarget(
-        Path(".github/workflows/picblobs.yml"),
-        "picblobs release workflow default",
-        re.compile(r'(?m)^(\s+default: ")([^"]+)(")$'),
-    ),
-    VersionTarget(
-        Path(".github/workflows/picblobs-cli.yml"),
-        "picblobs-cli release workflow default",
-        re.compile(r'(?m)^(\s+default: ")([^"]+)(")$'),
     ),
     VersionTarget(
         Path("CLAUDE.md"),

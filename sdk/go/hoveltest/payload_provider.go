@@ -30,9 +30,7 @@ func NewRPCConn(t testing.TB, module hovel.Module) *RPCConn {
 	done := make(chan error, 1)
 	go func() {
 		done <- hovel.ServeIO(module, inR, outW)
-		if err := outW.Close(); err != nil {
-			log.Printf("hoveltest: close RPC output pipe: %v", err)
-		}
+		logRPCOutputClose(outW.Close())
 	}()
 	return &RPCConn{t: t, in: inW, out: bufio.NewReader(outR), done: done}
 }
@@ -75,9 +73,15 @@ func (c *RPCConn) Close() {
 	if err := <-c.done; err != nil {
 		c.t.Fatalf("serve returned error: %v", err)
 	}
-	if err := c.in.Close(); err != nil {
-		c.t.Logf("close RPC input pipe: %v", err)
-	}
+	logRPCInputClose(c.t, c.in.Close())
+}
+
+func logRPCOutputClose(err error) {
+	if err != nil { log.Printf("hoveltest: close RPC output pipe: %v", err) }
+}
+
+func logRPCInputClose(t testing.TB, err error) {
+	if err != nil { t.Logf("close RPC input pipe: %v", err) }
 }
 
 func (c *RPCConn) readFrame() map[string]json.RawMessage {

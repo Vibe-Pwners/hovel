@@ -6,7 +6,7 @@ the versioned `hovel.lint-report/v1` format defined by
 
 - a stable tool id, display name, kind, and monorepo scope;
 - `PASSED` or `FAILED` status and elapsed duration;
-- the exact Task-backed commands that were run;
+- the exact Aspect-backed commands that were run;
 - every detected source-level ignore statement as a path, line, and source
   excerpt; and
 - the path to the tool's complete captured log.
@@ -17,5 +17,5 @@ to `.test-report/linters/report.json`, and keeps one log per tool. The test
 report generator accepts one or more documents with `--lint-report` and
 materializes their logs alongside the rest of the site evidence.
 
-Use `task lint:report` to produce only linter evidence or `task docs:report` to
+Use `aspect hovel-report` to produce only linter evidence or `aspect hovel-report` to
 run and publish the complete quality and test report.

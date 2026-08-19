@@ -9,7 +9,7 @@ import lintreport
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run Task-backed linters and emit hovel.lint-report/v1 evidence.")
+    parser = argparse.ArgumentParser(description="Run Aspect-backed linters and emit hovel.lint-report/v1 evidence.")
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--manifest", type=Path, default=Path("tools/testreport/lint_tools.json"))
     parser.add_argument("--output", type=Path, default=Path(".test-report/linters"))

@@ -68,7 +68,7 @@
 apt install qemu-system-x86 qemu-utils genisoimage
 
 # Run the local-only kernel VM test suite
-task -t ../../Taskfile.yml bazel:test -- //modules/picblobs/kernel:ubuntu_suite
+aspect test //modules/picblobs/kernel:ubuntu_suite
 
 # Interactive VM shell for exploration
 python3 kernel/vm/vm_harness.py shell --distro ubuntu

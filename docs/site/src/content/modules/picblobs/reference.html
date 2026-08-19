@@ -97,11 +97,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr><td><code>task picblobs:mbed-blobs -- ...</code></td><td>Materialize matched configured server/client C headers.</td></tr>
-            <tr><td><code>task picblobs:mbed-compile</code></td><td>Compile both pinned real-target firmware roles.</td></tr>
-            <tr><td><code>task picblobs:mbed-compile -- --role=server</code></td><td>Compile only the server role; use <code>client</code> for the peer.</td></tr>
-            <tr><td><code>task picblobs:test</code></td><td>Run the integrated module suite, including Mbed and NaCl checks.</td></tr>
-            <tr><td><code>task picblobs:ci</code></td><td>Run the module build and test gate.</td></tr>
+            <tr><td><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:materialize_blobs -- -- ...</code></td><td>Materialize matched configured server/client C headers.</td></tr>
+            <tr><td><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:compile_mbed_os --</code></td><td>Compile both pinned real-target firmware roles.</td></tr>
+            <tr><td><code>aspect run --bazel-flag=--config=picblobs_cross //modules/picblobs/mbed:compile_mbed_os -- -- --role=server</code></td><td>Compile only the server role; use <code>client</code> for the peer.</td></tr>
+            <tr><td><code>aspect hovel-check modules</code></td><td>Run the integrated module suite, including Mbed and NaCl checks.</td></tr>
+            <tr><td><code>aspect hovel-check modules</code></td><td>Run the module build and test gate.</td></tr>
           </tbody>
         </table>
       </article>

@@ -10,6 +10,7 @@ filegroup(
 filegroup(
     name = "protocol_doc_sources",
     srcs = [
+        "src/chain_kv.rs",
         "src/credential_delivery.rs",
         "src/credential_provider.rs",
         "src/mesh.rs",
@@ -30,4 +31,17 @@ rust_test(
     size = "small",
     crate = ":hovel",
     edition = "2021",
+)
+
+rust_test(
+    name = "hovel_coverage_test",
+    size = "small",
+    crate = ":hovel",
+    edition = "2021",
+    rustc_env = {"RUSTC_BOOTSTRAP": "1"},
+    rustc_flags = [
+        "-Cinstrument-coverage",
+        "-Clink-dead-code",
+        "-Zcoverage-options=branch",
+    ],
 )

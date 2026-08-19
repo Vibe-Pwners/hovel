@@ -125,7 +125,7 @@ func (a Artifact) toRPC() map[string]any {
 	return out
 }
 
-func (r Result) toRPC(sessions []SessionRef) map[string]any {
+func (r Result) toRPC(sessions []SessionRef, chainKVMutations ...map[string]any) map[string]any {
 	findings := make([]map[string]any, 0, len(r.Findings))
 	for _, finding := range r.Findings {
 		findings = append(findings, finding.toRPC())
@@ -162,6 +162,9 @@ func (r Result) toRPC(sessions []SessionRef) map[string]any {
 	}
 	if len(r.AgentHints) > 0 {
 		out["agentHints"] = r.AgentHints
+	}
+	if len(chainKVMutations) > 0 && chainKVMutations[0] != nil {
+		out["chainKVMutations"] = chainKVMutations[0]
 	}
 	return out
 }

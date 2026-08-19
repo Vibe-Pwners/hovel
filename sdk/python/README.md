@@ -260,11 +260,11 @@ def test_credential_provider_contract() -> None:
 Focused checks:
 
 ```sh
-task sdk:ci
+aspect hovel-check sdk
 ```
 
-Use <code>task sdk:test</code> while iterating on behavior and
-<code>task sdk:lint</code> for Python lint, type, and documentation checks. The
+Use <code>aspect hovel-check sdk</code> while iterating on behavior and
+<code>aspect hovel-check sdk</code> for Python lint, type, and documentation checks. The
 root Task wrappers select the integration workspace and remain the supported
 entry point.
 

@@ -4,8 +4,8 @@ set -euo pipefail
 # Full picblobs test suite: unit tests + payload execution tests, across both
 # the picblobs and picblobs-cli packages.
 #
-# This is the implementation behind `task test` / `task test:unit` /
-# `task test:payload` — prefer those entry points. Direct flags:
+# This is the implementation behind `aspect test` / `aspect test --bazel-flag=--config=picblobs_ci //modules/picblobs/python:tests` /
+# `aspect test --bazel-flag=--config=picblobs_ci //modules/picblobs/python:payload_tests` — prefer those entry points. Direct flags:
 #   --os <os> --arch <arch> --type <type>   filter payload tests
 #   --payload-only | --unit-only            select a subset
 #   anything else                           passed through to pytest
@@ -20,7 +20,7 @@ if [[ -z "${VIRTUAL_ENV:-}" ]]; then
         # shellcheck disable=SC1091
         source "$VENV/bin/activate"
     else
-        echo "error: no virtualenv found. Run: task setup" >&2
+        echo "error: no virtualenv found; use the Aspect test targets from the repository root" >&2
         exit 1
     fi
 fi
