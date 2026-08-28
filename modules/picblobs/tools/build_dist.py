@@ -16,6 +16,7 @@ import stat
 import tarfile
 import zipfile
 from dataclasses import dataclass
+from email import policy
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -200,7 +201,10 @@ def should_exclude(rel: Path) -> bool:
 
 
 def metadata(project: dict) -> str:
-    msg = EmailMessage()
+    # Core metadata fields such as Summary must remain on one physical line.
+    # EmailMessage otherwise folds headers at 78 characters, producing metadata
+    # that PyPI rejects even when the project description itself is single-line.
+    msg = EmailMessage(policy=policy.default.clone(max_line_length=0))
     msg["Metadata-Version"] = "2.4"
     msg["Name"] = project["name"]
     msg["Version"] = project["version"]

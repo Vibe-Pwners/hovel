@@ -76,6 +76,15 @@ def _check_author_metadata(metadata_text: str, label: str) -> None:
     )
 
 
+def _check_summary_metadata(metadata_text: str, label: str) -> None:
+    summary = Parser().parsestr(metadata_text).get("Summary")
+    _require(summary is not None, f"{label} is missing Summary")
+    _require(
+        "\n" not in summary and "\r" not in summary,
+        f"{label} Summary must be a single line, got {summary!r}",
+    )
+
+
 def _check_wheel_metadata(names: list[str], wheel: zipfile.ZipFile) -> None:
     metadata_name = next(
         (name for name in names if name.endswith(".dist-info/METADATA")),
@@ -85,6 +94,7 @@ def _check_wheel_metadata(names: list[str], wheel: zipfile.ZipFile) -> None:
     metadata_text = wheel.read(metadata_name).decode()
     _check_license_metadata(metadata_text, "wheel metadata")
     _check_author_metadata(metadata_text, "wheel metadata")
+    _check_summary_metadata(metadata_text, "wheel metadata")
 
 
 def _check_picblobs(names: list[str]) -> None:
@@ -155,6 +165,7 @@ def _check_sdist(path: Path, package: str, version: str | None) -> None:
         metadata_text = pkg_info_file.read().decode()
         _check_license_metadata(metadata_text, "sdist metadata")
         _check_author_metadata(metadata_text, "sdist metadata")
+        _check_summary_metadata(metadata_text, "sdist metadata")
     _require(
         any(name.endswith("pyproject.toml") for name in names),
         "sdist is missing pyproject.toml",
