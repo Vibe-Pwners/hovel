@@ -302,6 +302,7 @@ py_test(
         "build_dist_test.py",
     ],
     imports = ["."],
+    deps = [requirement("pytest")],
 )
 
 py_test(

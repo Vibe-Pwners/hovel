@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from build_dist import metadata
 
 
@@ -20,5 +21,7 @@ def test_long_summary_is_not_folded() -> None:
 
     metadata_text = metadata(project)
 
-    assert f"Summary: {description}\n" in metadata_text
-    assert "\n " not in metadata_text
+    if f"Summary: {description}\n" not in metadata_text:
+        pytest.fail("Summary was not serialized on one physical line")
+    if "\n " in metadata_text:
+        pytest.fail("distribution metadata contains a folded header")
