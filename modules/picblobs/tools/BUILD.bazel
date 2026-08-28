@@ -295,6 +295,16 @@ py_test(
 )
 
 py_test(
+    name = "build_dist_test",
+    size = "small",
+    srcs = [
+        "build_dist.py",
+        "build_dist_test.py",
+    ],
+    imports = ["."],
+)
+
+py_test(
     name = "stage_blobs_from_runfiles_test",
     size = "small",
     srcs = [

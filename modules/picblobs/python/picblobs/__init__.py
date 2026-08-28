@@ -52,7 +52,7 @@ from picblobs._introspect import (
     targets,
 )
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 __all__ = [
     "OS",
     "AllocJumpBuilder",

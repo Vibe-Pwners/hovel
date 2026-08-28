@@ -437,7 +437,7 @@ class TestExtractReleaseCleanup:
                 "sections": {},
             },
         )
-        monkeypatch.setattr("tools.extract_release._get_version", lambda: "0.1.7")
+        monkeypatch.setattr("tools.extract_release._get_version", lambda: "0.1.8")
 
         extracted, errors = extract_release(so_dir, out_dir)
         assert (extracted, errors) == (1, 0)
