@@ -456,11 +456,13 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 }
 
 type runCommandArgs struct {
-	Workspace string
-	Config    string
-	Operation string
-	Chain     string
-	Command   []string
+	Workspace    string
+	WorkspaceSet bool
+	Config       string
+	ConfigSet    bool
+	Operation    string
+	Chain        string
+	Command      []string
 }
 
 func runDaemonCommand(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
@@ -473,13 +475,14 @@ func runDaemonCommand(ctx context.Context, args []string, overrides daemonlocal.
 	if valid, validationCode := commandmode.NewApp().Validate(commandArgs, stderr); !valid {
 		return validationCode
 	}
-	options, err := daemonlocal.ResolveClientOptions(parsed.Workspace, parsed.Config, overrides)
+	workspace, configPath := daemonCommandClientContext(parsed, commandArgs)
+	options, err := daemonlocal.ResolveClientOptions(workspace, configPath, overrides)
 	if err != nil {
 		writeRootLine(stderr, err)
 		return 1
 	}
 	requireFull := !isDaemonStatusCommand(commandArgs)
-	session, client, err := daemonlocal.Connect(ctx, parsed.Workspace, "", parsed.Config, options, requireFull)
+	session, client, err := daemonlocal.Connect(ctx, workspace, "", configPath, options, requireFull)
 	if err != nil {
 		writeRootLine(stderr, err)
 		return 1
@@ -510,17 +513,33 @@ func runDaemonCommand(ctx context.Context, args []string, overrides daemonlocal.
 			catalog = modulecatalog.New()
 		}
 	} else {
-		catalog, err = (pythonrpc.Runner{WorkspacePath: parsed.Workspace, HovelConfig: parsed.Config}).Catalog(ctx)
+		catalog, err = (pythonrpc.Runner{WorkspacePath: workspace, HovelConfig: configPath}).Catalog(ctx)
 		if err != nil {
 			writeRootFormat(stderr, "hovel: failed to load module catalog: %v\n", err)
 			catalog = modulecatalog.New()
 		}
 	}
-	app := commandmode.NewAppWithSessionModulesAndWorkspace(operatorSession, catalog, parsed.Workspace)
+	app := commandmode.NewAppWithSessionModulesAndWorkspace(operatorSession, catalog, workspace)
 	if attached {
-		app = commandmode.NewAppWithAttachedDaemon(operatorSession, catalog, parsed.Workspace, session.Status(), client)
+		app = commandmode.NewAppWithAttachedDaemon(operatorSession, catalog, workspace, session.Status(), client)
 	}
 	return app.Run(ctx, commandArgs, stdout, stderr)
+}
+
+func daemonCommandClientContext(parsed runCommandArgs, commandArgs []string) (string, string) {
+	workspace := parsed.Workspace
+	if !parsed.WorkspaceSet {
+		if commandWorkspace := argumentValue(argsBeforePassthrough(commandArgs), "--workspace", "-w"); commandWorkspace != "" {
+			workspace = commandWorkspace
+		}
+	}
+	configPath := parsed.Config
+	if !parsed.ConfigSet {
+		if commandConfig := argumentValue(argsBeforePassthrough(commandArgs), "--config"); commandConfig != "" {
+			configPath = commandConfig
+		}
+	}
+	return workspace, configPath
 }
 
 func isDaemonStatusCommand(args []string) bool {
@@ -551,9 +570,11 @@ func parseRunCommandArgs(args []string, stdout, stderr io.Writer) (runCommandArg
 				return runCommandArgs{}, false, 2
 			}
 			parsed.Workspace = args[1]
+			parsed.WorkspaceSet = true
 			args = args[2:]
 		case strings.HasPrefix(arg, "--workspace="):
 			parsed.Workspace = strings.TrimPrefix(arg, "--workspace=")
+			parsed.WorkspaceSet = true
 			args = args[1:]
 		case arg == "--config":
 			if len(args) < 2 {
@@ -561,9 +582,11 @@ func parseRunCommandArgs(args []string, stdout, stderr io.Writer) (runCommandArg
 				return runCommandArgs{}, false, 2
 			}
 			parsed.Config = args[1]
+			parsed.ConfigSet = true
 			args = args[2:]
 		case strings.HasPrefix(arg, "--config="):
 			parsed.Config = strings.TrimPrefix(arg, "--config=")
+			parsed.ConfigSet = true
 			args = args[1:]
 		case arg == "--op" || arg == "--operation":
 			if len(args) < 2 {

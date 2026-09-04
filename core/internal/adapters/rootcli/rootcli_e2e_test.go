@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -382,5 +383,52 @@ func TestRemoteReadOnlyTCPAllowsStatusAndRejectsMutation(t *testing.T) {
 		"run", "--workspace", clientWorkspace, "--", "op", "create", "denied",
 	}, &mutationOut, &mutationErr); code == 0 || !strings.Contains(mutationErr.String(), "read-only") {
 		t.Fatalf("remote mutation exit code = %d, stdout = %s, stderr = %s", code, mutationOut.String(), mutationErr.String())
+	}
+}
+
+func TestDirectStatusPreservesConfiguredRemoteDaemonEndpoint(t *testing.T) {
+	serverWorkspace := testsupport.TempDir(t)
+	clientWorkspace := testsupport.TempDir(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	config := []byte("apiVersion: hovel.dev/v1alpha1\nkind: HovelConfig\ndaemon:\n  client:\n    endpoint: tcp://" + address + "\n")
+	if err := os.WriteFile(filepath.Join(clientWorkspace, "config.yaml"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	codes := make(chan int, 1)
+	var daemonStdout, daemonStderr bytes.Buffer
+	go func() {
+		codes <- Run(ctx, []string{
+			"daemon", "serve", "--workspace", serverWorkspace,
+			"--listen", "tcp://" + address,
+		}, &daemonStdout, &daemonStderr)
+	}()
+	defer func() {
+		cancel()
+		if code := <-codes; code != 0 {
+			t.Fatalf("daemon exit code = %d, stderr = %s", code, daemonStderr.String())
+		}
+	}()
+	testsupport.WaitFor(t, func() bool {
+		status, err := filesystem.NewWorkspaceStore().DaemonStatus(context.Background(), serverWorkspace)
+		return err == nil && status.State == daemon.StateRunning
+	})
+
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{
+		"status", "--workspace", clientWorkspace, "--json",
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("configured remote status exit code = %d, stdout = %s, stderr = %s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), serverWorkspace) {
+		t.Fatalf("configured remote status = %q, want daemon workspace %q", stdout.String(), serverWorkspace)
 	}
 }
