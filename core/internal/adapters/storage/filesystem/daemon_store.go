@@ -41,6 +41,7 @@ func (s WorkspaceStore) DaemonStatus(ctx context.Context, workspacePath string) 
 		HovelConfig:   file.HovelConfig,
 		StartedAt:     startedAt,
 		Health:        daemon.Health(file.Health),
+		Listeners:     append([]daemon.Listener(nil), file.Listeners...),
 	})
 	if err != nil {
 		return daemon.Status{}, err
@@ -63,6 +64,7 @@ func (s WorkspaceStore) WriteDaemonStatus(ctx context.Context, identity daemon.I
 		HovelConfig:   identity.HovelConfig,
 		StartedAt:     identity.StartedAt.Format(time.RFC3339Nano),
 		Health:        string(identity.Health),
+		Listeners:     append([]daemon.Listener(nil), identity.Listeners...),
 	}
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
@@ -84,12 +86,13 @@ func (s WorkspaceStore) ClearDaemonStatus(ctx context.Context, workspacePath str
 }
 
 type daemonFile struct {
-	WorkspacePath string `json:"workspacePath"`
-	PID           int    `json:"pid"`
-	SocketPath    string `json:"socketPath"`
-	HovelConfig   string `json:"hovelConfig,omitempty"`
-	StartedAt     string `json:"startedAt"`
-	Health        string `json:"health"`
+	WorkspacePath string            `json:"workspacePath"`
+	PID           int               `json:"pid"`
+	SocketPath    string            `json:"socketPath"`
+	HovelConfig   string            `json:"hovelConfig,omitempty"`
+	StartedAt     string            `json:"startedAt"`
+	Health        string            `json:"health"`
+	Listeners     []daemon.Listener `json:"listeners,omitempty"`
 }
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {

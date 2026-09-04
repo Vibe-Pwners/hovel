@@ -13,8 +13,10 @@ go_library(
         "//internal/adapters/daemonrpc",
         "//internal/adapters/storage/filesystem",
         "//internal/adapters/storage/sqlite",
+        "//internal/app/hovelconfig",
         "//internal/app/pki",
         "//internal/app/services",
+        "//internal/domain/daemon",
         "//internal/domain/pki",
         "//internal/domain/workspace",
         "//internal/infra/daemonmanager",
@@ -26,7 +28,10 @@ go_library(
 
 go_test(
     name = "daemonlocal_test",
-    srcs = ["pki_control_test.go"],
+    srcs = [
+        "client_test.go",
+        "pki_control_test.go",
+    ],
     embed = [":daemonlocal"],
     deps = [
         "//internal/app/pki",

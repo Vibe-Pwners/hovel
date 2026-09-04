@@ -339,9 +339,11 @@
     Normal list and inspect methods never return private-key material. The daemon's
     <code>ExportPKIBundle</code> response is the one external control response that can:
     private export must match the generation's <code>explicit-private-export</code> policy,
-    carry <code>approvePrivateKeyExport</code>, use the privileged local transport, and is
-    audited and marked <code>Cache-Control: no-store</code>. For an externally held key, a
-    bundle carries a provider reference rather than private bytes.
+    carry <code>approvePrivateKeyExport</code>, use an owner Unix listener or explicitly
+    acknowledged <code>insecure-full</code> TCP listener, and is audited and marked
+    <code>Cache-Control: no-store</code>. Plaintext TCP provides no confidentiality, so
+    secret-bearing use is suitable only on a separately protected network. For an
+    externally held key, a bundle carries a provider reference rather than private bytes.
   </p>
 
   <h2 id="backends-and-providers">Crypto backends, compatibility targets, and credential providers</h2>

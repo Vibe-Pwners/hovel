@@ -23,6 +23,24 @@ type Config struct {
 	Cache      Cache         `yaml:"cache,omitempty"`
 	Runtime    Runtime       `yaml:"runtime,omitempty"`
 	Logging    LoggingConfig `yaml:"logging,omitempty"`
+	Daemon     DaemonConfig  `yaml:"daemon,omitempty"`
+}
+
+type DaemonConfig struct {
+	Listeners []DaemonListener `yaml:"listeners,omitempty" json:"listeners,omitempty"`
+	Client    DaemonClient     `yaml:"client,omitempty" json:"client,omitempty"`
+}
+
+type DaemonListener struct {
+	Bind      string `yaml:"bind" json:"bind"`
+	Advertise string `yaml:"advertise,omitempty" json:"advertise,omitempty"`
+	Access    string `yaml:"access,omitempty" json:"access,omitempty"`
+}
+
+type DaemonClient struct {
+	Endpoint                 string `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	AllowInsecureFullControl bool   `yaml:"allowInsecureFullControl,omitempty" json:"allowInsecureFullControl,omitempty"`
+	ConnectTimeout           string `yaml:"connectTimeout,omitempty" json:"connectTimeout,omitempty"`
 }
 
 type Modules struct {
@@ -75,6 +93,18 @@ type rawConfig struct {
 	Cache      *rawCache   `yaml:"cache"`
 	Runtime    *rawRuntime `yaml:"runtime"`
 	Logging    *rawLogging `yaml:"logging"`
+	Daemon     *rawDaemon  `yaml:"daemon"`
+}
+
+type rawDaemon struct {
+	Listeners *[]DaemonListener `yaml:"listeners"`
+	Client    *rawDaemonClient  `yaml:"client"`
+}
+
+type rawDaemonClient struct {
+	Endpoint                 *string `yaml:"endpoint"`
+	AllowInsecureFullControl *bool   `yaml:"allowInsecureFullControl"`
+	ConnectTimeout           *string `yaml:"connectTimeout"`
 }
 
 type rawModules struct {
@@ -238,6 +268,34 @@ func mergeRaw(config *Config, raw rawConfig) {
 	if raw.Logging != nil && raw.Logging.Level != nil {
 		config.Logging.Level = strings.TrimSpace(*raw.Logging.Level)
 	}
+	if raw.Daemon != nil {
+		if raw.Daemon.Listeners != nil {
+			config.Daemon.Listeners = cloneDaemonListeners(*raw.Daemon.Listeners)
+		}
+		if raw.Daemon.Client != nil {
+			client := raw.Daemon.Client
+			if client.Endpoint != nil {
+				config.Daemon.Client.Endpoint = strings.TrimSpace(*client.Endpoint)
+			}
+			if client.AllowInsecureFullControl != nil {
+				config.Daemon.Client.AllowInsecureFullControl = *client.AllowInsecureFullControl
+			}
+			if client.ConnectTimeout != nil {
+				config.Daemon.Client.ConnectTimeout = strings.TrimSpace(*client.ConnectTimeout)
+			}
+		}
+	}
+}
+
+func cloneDaemonListeners(values []DaemonListener) []DaemonListener {
+	out := make([]DaemonListener, 0, len(values))
+	for _, value := range values {
+		value.Bind = strings.TrimSpace(value.Bind)
+		value.Advertise = strings.TrimSpace(value.Advertise)
+		value.Access = strings.TrimSpace(value.Access)
+		out = append(out, value)
+	}
+	return out
 }
 
 func cleanStrings(values []string) []string {

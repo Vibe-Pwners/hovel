@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/vibepwners/hovel/internal/app/launchkey"
+	"github.com/vibepwners/hovel/internal/app/modulecatalog"
 	"github.com/vibepwners/hovel/internal/app/operatorlog"
 	"github.com/vibepwners/hovel/internal/app/operatorsession"
 	apppki "github.com/vibepwners/hovel/internal/app/pki"
@@ -95,6 +96,39 @@ const (
 	rpcMethodStageTrustSet              = "StagePKITrustSet"
 	rpcMethodActivateTrustSet           = "ActivatePKITrustSet"
 )
+
+const InsecureFullControlHeader = "X-Hovel-Insecure-Full-Control"
+
+type TransportAccess string
+
+const (
+	TransportAccessOwner        TransportAccess = "owner"
+	TransportAccessReadOnly     TransportAccess = "read-only"
+	TransportAccessInsecureFull TransportAccess = "insecure-full"
+)
+
+type transportAccessContextKey struct{}
+
+// WithTransportAccess binds a handler to one listener's access policy. The
+// insecure-full acknowledgement is intentionally not authentication.
+func WithTransportAccess(handler http.Handler, access TransportAccess) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		effective := access
+		if access == TransportAccessInsecureFull && !strings.EqualFold(strings.TrimSpace(r.Header.Get(InsecureFullControlHeader)), "true") {
+			effective = TransportAccessReadOnly
+		}
+		ctx := context.WithValue(r.Context(), transportAccessContextKey{}, effective)
+		handler.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func transportAllowsPrivileged(ctx context.Context, fallback bool) bool {
+	access, ok := ctx.Value(transportAccessContextKey{}).(TransportAccess)
+	if !ok {
+		return fallback
+	}
+	return access == TransportAccessOwner || access == TransportAccessInsecureFull
+}
 
 // RPCErrorCode is the stable machine-readable category for a daemon failure.
 type RPCErrorCode string
@@ -735,6 +769,9 @@ type Server struct {
 	persistSession  func(operatorsession.PersistedState) error
 	throwKV         map[string]*throwKVState
 	mu              sync.Mutex
+	info            DaemonInfo
+	modules         modulecatalog.Catalog
+	moduleProvider  func(context.Context) (modulecatalog.Catalog, error)
 }
 
 type throwKVState struct {
@@ -761,6 +798,8 @@ func Register(mux *http.ServeMux, runs services.RunService, options ...ServerOpt
 	for _, option := range options {
 		option(rpcServer)
 	}
+	registerUnary[EmptyRequest, DaemonInfo](mux, "GetDaemonInfo", rpcServer.daemonInfoRPC)
+	registerUnary[EmptyRequest, ModuleCatalogResponse](mux, "GetModuleCatalog", rpcServer.moduleCatalogRPC)
 	registerPrivilegedUnary[ExecuteModuleRequest, ExecuteModuleResponse](mux, "ExecuteModule", rpcServer.privileged, rpcServer.executeModuleRPC)
 	registerUnary[EmptyRequest, ListSessionsResponse](mux, "ListSessions", rpcServer.listSessionsRPC)
 	registerUnary[SessionReadRequest, SessionChunk](mux, "ReadSession", rpcServer.readSessionRPC)
@@ -914,7 +953,7 @@ func privilegedRPCHandler[Req, Res any](
 	fn func(context.Context, Req) (Res, error),
 ) func(context.Context, Req) (Res, error) {
 	return func(ctx context.Context, req Req) (Res, error) {
-		if !allowed {
+		if !transportAllowsPrivileged(ctx, allowed) {
 			var zero Res
 			return zero, errPrivilegedControlUnavailable
 		}
@@ -1120,6 +1159,24 @@ func WithPrivilegedControl(allowed bool) ServerOption {
 func WithLaunchKeyPolicy(policy operatordomain.LaunchKeyPolicy) ServerOption {
 	return func(server *Server) {
 		server.launchKeyPolicy = operatordomain.NormalizeLaunchKeyPolicy(policy)
+	}
+}
+
+func WithDaemonInfo(info DaemonInfo) ServerOption {
+	return func(server *Server) {
+		server.info = info
+	}
+}
+
+func WithModuleCatalog(catalog modulecatalog.Catalog) ServerOption {
+	return func(server *Server) {
+		server.modules = catalog
+	}
+}
+
+func WithModuleCatalogProvider(provider func(context.Context) (modulecatalog.Catalog, error)) ServerOption {
+	return func(server *Server) {
+		server.moduleProvider = provider
 	}
 }
 
@@ -1832,6 +1889,47 @@ type AppendLogRequest struct {
 type EmptyResponse struct{}
 
 type EmptyRequest struct{}
+
+type DaemonListenerInfo struct {
+	Network   string `json:"network"`
+	Bind      string `json:"bind"`
+	Advertise string `json:"advertise"`
+	Access    string `json:"access"`
+}
+
+type DaemonInfo struct {
+	WorkspacePath string               `json:"workspacePath"`
+	PID           int                  `json:"pid"`
+	StartedAt     string               `json:"startedAt"`
+	Health        string               `json:"health"`
+	Access        string               `json:"access"`
+	Listeners     []DaemonListenerInfo `json:"listeners,omitempty"`
+}
+
+type ModuleCatalogResponse struct {
+	Modules []modulecatalog.Module `json:"modules"`
+}
+
+func (s *Server) daemonInfoRPC(ctx context.Context, _ EmptyRequest) (DaemonInfo, error) {
+	info := s.info
+	if access, ok := ctx.Value(transportAccessContextKey{}).(TransportAccess); ok {
+		info.Access = string(access)
+	}
+	info.Listeners = append([]DaemonListenerInfo(nil), info.Listeners...)
+	return info, nil
+}
+
+func (s *Server) moduleCatalogRPC(ctx context.Context, _ EmptyRequest) (ModuleCatalogResponse, error) {
+	catalog := s.modules
+	if s.moduleProvider != nil {
+		var err error
+		catalog, err = s.moduleProvider(ctx)
+		if err != nil {
+			return ModuleCatalogResponse{}, err
+		}
+	}
+	return ModuleCatalogResponse{Modules: catalog.List()}, nil
+}
 
 type ActiveLogsRequest struct {
 	Operation string
@@ -3237,7 +3335,7 @@ func (s *Server) exportPKIBundleRPC(ctx context.Context, req PKIBundleExportRequ
 	if err != nil {
 		return domainpki.Bundle{}, err
 	}
-	if req.IncludePrivate && !s.pkiSecrets {
+	if req.IncludePrivate && !transportAllowsPrivileged(ctx, s.pkiSecrets) {
 		return domainpki.Bundle{}, errors.New("private PKI export is unavailable on this daemon transport")
 	}
 	ctx, err = req.Context.bind(ctx)
@@ -3546,17 +3644,31 @@ func operatorEntityFromDomain(entity operatordomain.Entity) OperatorEntity {
 }
 
 type Client struct {
-	httpClient *http.Client
-	baseURL    string
+	httpClient                     *http.Client
+	baseURL                        string
+	acknowledgeInsecureFullControl bool
+}
+
+type DialOptions struct {
+	ConnectTimeout                 time.Duration
+	AcknowledgeInsecureFullControl bool
 }
 
 func Dial(socketPath string) (*Client, error) {
-	endpoint, err := ParseEndpoint(socketPath)
+	return DialWithOptions(socketPath, DialOptions{})
+}
+
+func DialWithOptions(socketPath string, options DialOptions) (*Client, error) {
+	endpoint, err := ParseClientEndpoint(socketPath)
 	if err != nil {
 		return nil, err
 	}
-	client := NewClient(endpoint)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	client := NewClientWithOptions(endpoint, options)
+	timeout := options.ConnectTimeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if _, err := client.PollLogs(ctx, 0); err != nil {
 		logDaemonRPCError("close daemon client after failed dial", client.Close())
@@ -3566,6 +3678,10 @@ func Dial(socketPath string) (*Client, error) {
 }
 
 func NewClient(endpoint Endpoint) *Client {
+	return NewClientWithOptions(endpoint, DialOptions{})
+}
+
+func NewClientWithOptions(endpoint Endpoint, options DialOptions) *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	baseURL := endpoint.BaseURL()
 	if endpoint.Network == "unix" {
@@ -3576,8 +3692,9 @@ func NewClient(endpoint Endpoint) *Client {
 		}
 	}
 	return &Client{
-		httpClient: &http.Client{Transport: transport},
-		baseURL:    baseURL,
+		httpClient:                     &http.Client{Transport: transport},
+		baseURL:                        baseURL,
+		acknowledgeInsecureFullControl: options.AcknowledgeInsecureFullControl,
 	}
 }
 
@@ -3591,6 +3708,18 @@ func (c *Client) Close() error {
 
 func (c *Client) RunMockExploit(ctx context.Context, req RunMockExploitRequest) (RunMockExploitResponse, error) {
 	return c.ExecuteModule(ctx, ExecuteModuleRequest(req))
+}
+
+func (c *Client) GetDaemonInfo(ctx context.Context) (DaemonInfo, error) {
+	return invoke[EmptyRequest, DaemonInfo](c, ctx, "GetDaemonInfo", EmptyRequest{})
+}
+
+func (c *Client) GetModuleCatalog(ctx context.Context) (modulecatalog.Catalog, error) {
+	response, err := invoke[EmptyRequest, ModuleCatalogResponse](c, ctx, "GetModuleCatalog", EmptyRequest{})
+	if err != nil {
+		return modulecatalog.New(), err
+	}
+	return modulecatalog.New(response.Modules...), nil
 }
 
 func (c *Client) ExecuteModule(ctx context.Context, req ExecuteModuleRequest) (ExecuteModuleResponse, error) {
@@ -4346,6 +4475,9 @@ func invoke[Req, Res any](c *Client, ctx context.Context, method string, req Req
 		return zero, fmt.Errorf("%s: %w", method, err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if c.acknowledgeInsecureFullControl {
+		httpReq.Header.Set(InsecureFullControlHeader, "true")
+	}
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return zero, fmt.Errorf("%s: %w", method, err)
@@ -4441,6 +4573,27 @@ func ParseEndpoint(value string) (Endpoint, error) {
 	}
 }
 
+func ParseClientEndpoint(value string) (Endpoint, error) {
+	endpoint, err := ParseEndpoint(value)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	if endpoint.Network != "tcp" {
+		return endpoint, nil
+	}
+	host, _, err := net.SplitHostPort(endpoint.Address)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	if strings.TrimSpace(host) == "" {
+		return Endpoint{}, errors.New("daemon tcp client endpoint requires a dialable host")
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		return Endpoint{}, errors.New("daemon tcp client endpoint cannot use an unspecified host")
+	}
+	return endpoint, nil
+}
+
 func unixEndpoint(path string) (Endpoint, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -4454,23 +4607,11 @@ func tcpEndpoint(address string) (Endpoint, error) {
 	if address == "" {
 		return Endpoint{}, errors.New("daemon tcp address is required")
 	}
-	host, _, err := net.SplitHostPort(address)
+	_, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return Endpoint{}, err
 	}
-	if !isLoopbackDaemonHost(host) {
-		return Endpoint{}, fmt.Errorf("daemon tcp host %q must be loopback", host)
-	}
 	return Endpoint{Network: "tcp", Address: address}, nil
-}
-
-func isLoopbackDaemonHost(host string) bool {
-	host = strings.TrimSpace(host)
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func (e Endpoint) BaseURL() string {

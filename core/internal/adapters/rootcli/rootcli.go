@@ -2,9 +2,11 @@ package rootcli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/akamensky/argparse"
@@ -25,6 +27,13 @@ import (
 )
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	var daemonOverrides daemonlocal.ClientOverrides
+	var err error
+	args, daemonOverrides, err = extractDaemonClientFlags(args)
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 2
+	}
 	args = normalizeLeadingConfig(args)
 	if len(args) == 0 || helpRequested(args) && (args[0] == "-h" || args[0] == "--help") {
 		parser := newRootParser()
@@ -37,17 +46,30 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "command":
+		requested, requestErr := daemonClientRequested(args[1:], daemonOverrides)
+		if requestErr != nil {
+			writeRootLine(stderr, requestErr)
+			return 2
+		}
+		if requested {
+			return runDaemonCommand(ctx, args[1:], daemonOverrides, stdout, stderr)
+		}
 		return commandmode.Run(ctx, args[1:], stdout, stderr)
 	case "run":
-		return runDaemonCommand(ctx, args[1:], stdout, stderr)
+		return runDaemonCommand(ctx, args[1:], daemonOverrides, stdout, stderr)
 	case "cli", "shell":
-		return cli.Run(ctx, args[1:], stdout, stderr)
+		options, err := resolveDaemonClientOptions(args[1:], daemonOverrides)
+		if err != nil {
+			writeRootLine(stderr, err)
+			return 2
+		}
+		return cli.RunWithDaemonOptions(ctx, args[1:], argumentValue(args[1:], "--config"), options, stdout, stderr)
 	case "mcp":
-		return runMCP(ctx, args[1:], stdout, stderr)
+		return runMCP(ctx, args[1:], daemonOverrides, stdout, stderr)
 	case "agent":
 		return runAgent(ctx, args[1:], stdout, stderr)
 	case "daemon":
-		return runDaemon(ctx, args[1:], stdout, stderr)
+		return runDaemon(ctx, args[1:], daemonOverrides, stdout, stderr)
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
 	case "tui":
@@ -60,20 +82,99 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "init":
 		return commandmode.Run(ctx, append([]string{"control", "init"}, args[1:]...), stdout, stderr)
 	case "status":
-		return commandmode.Run(ctx, append([]string{"control", "daemon", "status"}, args[1:]...), stdout, stderr)
+		statusArgs := append([]string{"control", "daemon", "status"}, args[1:]...)
+		requested, requestErr := daemonClientRequested(statusArgs, daemonOverrides)
+		if requestErr != nil {
+			writeRootLine(stderr, requestErr)
+			return 2
+		}
+		if requested {
+			return runDaemonCommand(ctx, statusArgs, daemonOverrides, stdout, stderr)
+		}
+		return commandmode.Run(ctx, statusArgs, stdout, stderr)
 	default:
 		if args[0] == "throw" && throwFileArg(args[1:]) != "" {
-			return runOneShotThrow(ctx, args, stdout, stderr)
+			return runOneShotThrow(ctx, args, daemonOverrides, stdout, stderr)
 		}
 		if isDirectSessionConnectCommand(args) {
-			return runDirectSessionConnect(ctx, args, stdout, stderr)
+			return runDirectSessionConnect(ctx, args, daemonOverrides, stdout, stderr)
 		}
 		if commandmode.NewApp().Registry().HasRoot(args[0]) {
+			requested, requestErr := daemonClientRequested(args, daemonOverrides)
+			if requestErr != nil {
+				writeRootLine(stderr, requestErr)
+				return 2
+			}
+			if requested {
+				return runDaemonCommand(ctx, args, daemonOverrides, stdout, stderr)
+			}
 			return commandmode.Run(ctx, args, stdout, stderr)
 		}
 		writeRootText(stderr, newRootParser().Usage(fmt.Sprintf("unknown command or role %q", args[0])))
 		return 2
 	}
+}
+
+func daemonClientRequested(args []string, overrides daemonlocal.ClientOverrides) (bool, error) {
+	options, err := resolveDaemonClientOptions(args, overrides)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(options.Endpoint) != "", nil
+}
+
+func extractDaemonClientFlags(args []string) ([]string, daemonlocal.ClientOverrides, error) {
+	var overrides daemonlocal.ClientOverrides
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		switch {
+		case arg == "--daemon-endpoint":
+			if i+1 >= len(args) {
+				return nil, overrides, errors.New("--daemon-endpoint requires a value")
+			}
+			i++
+			overrides.Endpoint = args[i]
+		case strings.HasPrefix(arg, "--daemon-endpoint="):
+			overrides.Endpoint = strings.TrimPrefix(arg, "--daemon-endpoint=")
+		case arg == "--daemon-connect-timeout":
+			if i+1 >= len(args) {
+				return nil, overrides, errors.New("--daemon-connect-timeout requires a value")
+			}
+			i++
+			overrides.ConnectTimeout = args[i]
+		case strings.HasPrefix(arg, "--daemon-connect-timeout="):
+			overrides.ConnectTimeout = strings.TrimPrefix(arg, "--daemon-connect-timeout=")
+		case arg == "--allow-insecure-daemon":
+			overrides.AllowInsecure = true
+			overrides.AllowInsecureSet = true
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out, overrides, nil
+}
+
+func resolveDaemonClientOptions(args []string, overrides daemonlocal.ClientOverrides) (daemonlocal.ClientOptions, error) {
+	return daemonlocal.ResolveClientOptions(argumentValue(args, "--workspace", "-w"), argumentValue(args, "--config"), overrides)
+}
+
+func argumentValue(args []string, names ...string) string {
+	for i, arg := range args {
+		for _, name := range names {
+			if arg == name && i+1 < len(args) {
+				return args[i+1]
+			}
+			if strings.HasPrefix(arg, name+"=") {
+				return strings.TrimPrefix(arg, name+"=")
+			}
+		}
+	}
+	return ""
 }
 
 func normalizeLeadingConfig(args []string) []string {
@@ -116,7 +217,7 @@ func isDirectSessionConnectCommand(args []string) bool {
 	return !cli.SessionConnectHelpRequested(args[2:])
 }
 
-func runDirectSessionConnect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runDirectSessionConnect(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
 	if ok, code := commandmode.NewApp().Validate(args, stderr); !ok {
 		return code
 	}
@@ -126,27 +227,50 @@ func runDirectSessionConnect(ctx context.Context, args []string, stdout, stderr 
 		return 2
 	}
 	workspacePath := workspacepath.ResolvePath(parsed.Workspace)
-	status, err := daemonlocal.NewManager().Daemons.Status(ctx, services.DaemonStatusRequest{WorkspacePath: workspacePath})
+	options, err := daemonlocal.ResolveClientOptions(workspacePath, "", overrides)
 	if err != nil {
 		writeRootLine(stderr, err)
 		return 1
 	}
-	if status.State != daemon.StateRunning {
-		writeRootLine(stderr, "daemon is not running for workspace "+status.WorkspacePath)
-		return 1
+	if strings.TrimSpace(options.Endpoint) == "" {
+		status, statusErr := daemonlocal.NewManager().Daemons.Status(ctx, services.DaemonStatusRequest{WorkspacePath: workspacePath})
+		if statusErr != nil {
+			writeRootLine(stderr, statusErr)
+			return 1
+		}
+		if status.State != daemon.StateRunning {
+			writeRootLine(stderr, "daemon is not running for workspace "+status.WorkspacePath)
+			return 1
+		}
+		client, dialErr := daemonrpc.Dial(status.Identity.SocketPath)
+		if dialErr != nil {
+			writeRootLine(stderr, dialErr)
+			return 1
+		}
+		defer func() { logRootError("close daemon rpc client", client.Close()) }()
+		return cli.RunSessionConnect(ctx, client, parsed.SessionID, parsed.Options, stdout, stderr)
 	}
-	client, err := daemonrpc.Dial(status.Identity.SocketPath)
+	session, client, err := daemonlocal.Connect(ctx, workspacePath, "", "", options, true)
 	if err != nil {
 		writeRootLine(stderr, err)
 		return 1
 	}
+	defer func() { logRootError("close daemon manager session", session.Close()) }()
 	defer func() { logRootError("close daemon rpc client", client.Close()) }()
 	return cli.RunSessionConnect(ctx, client, parsed.SessionID, parsed.Options, stdout, stderr)
 }
 
-func runOneShotThrow(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runOneShotThrow(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
 	if ok, code := commandmode.NewApp().Validate(args, stderr); !ok {
 		return code
+	}
+	requested, err := daemonClientRequested(args, overrides)
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 2
+	}
+	if requested {
+		return runDaemonCommand(ctx, args, overrides, stdout, stderr)
 	}
 	session, err := daemonlocal.NewManager().Ensure(ctx, throwWorkspaceArg(args[1:]))
 	if err != nil {
@@ -157,7 +281,7 @@ func runOneShotThrow(ctx context.Context, args []string, stdout, stderr io.Write
 	return commandmode.Run(ctx, args, stdout, stderr)
 }
 
-func runDaemon(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runDaemon(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
 	if len(args) == 0 || helpRequested(args) && (args[0] == "-h" || args[0] == "--help") {
 		parser := newDaemonParser()
 		if helpRequested(args) {
@@ -171,7 +295,16 @@ func runDaemon(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	case "serve":
 		return runDaemonServe(ctx, args[1:], stdout, stderr)
 	case "status":
-		return commandmode.Run(ctx, append([]string{"control", "daemon", "status"}, args[1:]...), stdout, stderr)
+		statusArgs := append([]string{"control", "daemon", "status"}, args[1:]...)
+		requested, requestErr := daemonClientRequested(statusArgs, overrides)
+		if requestErr != nil {
+			writeRootLine(stderr, requestErr)
+			return 2
+		}
+		if requested {
+			return runDaemonCommand(ctx, statusArgs, overrides, stdout, stderr)
+		}
+		return commandmode.Run(ctx, statusArgs, stdout, stderr)
 	default:
 		writeRootText(stderr, newDaemonParser().Usage(fmt.Sprintf("unknown daemon command %q", args[0])))
 		return 2
@@ -182,20 +315,37 @@ func runDaemonServe(ctx context.Context, args []string, stdout, stderr io.Writer
 	parser := argparse.NewParser("hovel daemon serve", "Run the daemon role in the mono-binary.")
 	workspacePath := parser.String("w", "workspace", &argparse.Options{Help: "Workspace path"})
 	socketPath := parser.String("s", "socket", &argparse.Options{Help: "Local RPC socket path"})
-	listenAddress := parser.String("", "listen", &argparse.Options{Help: "RPC listen endpoint, such as unix:/tmp/hoveld.sock or tcp://127.0.0.1:9090"})
+	listenAddresses := parser.StringList("", "listen", &argparse.Options{Help: "RPC listen endpoint; repeat for multiple listeners"})
+	advertiseAddresses := parser.StringList("", "advertise", &argparse.Options{Help: "Advertised endpoint mapping as <bind>=<endpoint>; repeat as needed"})
+	allowInsecureTCP := parser.Flag("", "allow-insecure-tcp", &argparse.Options{Help: "Enable unauthenticated, unencrypted full control on configured TCP listeners"})
 	configPath := parser.String("", "config", &argparse.Options{Help: "Hovel config file path"})
 	moduleConfig := parser.String("", "module-config", &argparse.Options{Help: "Module launch catalog path"})
 	if ok, code := parseArgs(parser, args, stdout, stderr); !ok {
 		return code
 	}
+	if *socketPath != "" && (len(*listenAddresses) != 0 || len(*advertiseAddresses) != 0) {
+		writeRootLine(stderr, "--socket cannot be combined with --listen or --advertise")
+		return 2
+	}
+	var listeners []daemonruntime.ListenerSpec
+	var err error
+	if *socketPath != "" {
+		listeners = []daemonruntime.ListenerSpec{{Bind: *socketPath}}
+	} else {
+		listeners, err = daemonListenerSpecs(*listenAddresses, *advertiseAddresses, *allowInsecureTCP)
+	}
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 2
+	}
 
 	writeRootFormat(stdout, "serving hoveld role for workspace %s\n", displayWorkspace(*workspacePath))
 	if err := daemonlocal.Serve(ctx, daemonruntime.Args{
-		WorkspacePath: *workspacePath,
-		SocketPath:    *socketPath,
-		ListenAddress: *listenAddress,
-		ModuleConfig:  *moduleConfig,
-		HovelConfig:   *configPath,
+		WorkspacePath:    *workspacePath,
+		Listeners:        listeners,
+		AllowInsecureTCP: *allowInsecureTCP,
+		ModuleConfig:     *moduleConfig,
+		HovelConfig:      *configPath,
 	}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return 0
@@ -206,8 +356,64 @@ func runDaemonServe(ctx context.Context, args []string, stdout, stderr io.Writer
 	return 0
 }
 
+func daemonListenerSpecs(listen, advertise []string, allowInsecure bool) ([]daemonruntime.ListenerSpec, error) {
+	if len(listen) == 0 {
+		if len(advertise) != 0 {
+			return nil, errors.New("--advertise requires at least one --listen endpoint")
+		}
+		value := strings.TrimSpace(os.Getenv("HOVEL_DAEMON_LISTENERS"))
+		if value == "" {
+			return nil, nil
+		}
+		var configured []struct {
+			Bind      string `json:"bind"`
+			Advertise string `json:"advertise"`
+			Access    string `json:"access"`
+		}
+		if err := json.Unmarshal([]byte(value), &configured); err != nil {
+			return nil, fmt.Errorf("invalid HOVEL_DAEMON_LISTENERS: %w", err)
+		}
+		out := make([]daemonruntime.ListenerSpec, 0, len(configured))
+		for _, listener := range configured {
+			out = append(out, daemonruntime.ListenerSpec{Bind: listener.Bind, Advertise: listener.Advertise, Access: listener.Access})
+		}
+		return out, nil
+	}
+	out := make([]daemonruntime.ListenerSpec, 0, len(listen))
+	byBind := make(map[string]string, len(advertise))
+	for _, mapping := range advertise {
+		bind, endpoint, ok := strings.Cut(mapping, "=")
+		if !ok || strings.TrimSpace(bind) == "" || strings.TrimSpace(endpoint) == "" {
+			return nil, fmt.Errorf("invalid --advertise %q; use <bind>=<endpoint>", mapping)
+		}
+		byBind[strings.TrimSpace(bind)] = strings.TrimSpace(endpoint)
+	}
+	for _, bind := range listen {
+		bind = strings.TrimSpace(bind)
+		access := ""
+		if allowInsecure {
+			endpoint, err := daemonrpc.ParseEndpoint(bind)
+			if err != nil {
+				return nil, err
+			}
+			if endpoint.Network == "tcp" {
+				access = "insecure-full"
+			}
+		}
+		out = append(out, daemonruntime.ListenerSpec{Bind: bind, Advertise: byBind[bind], Access: access})
+		delete(byBind, bind)
+	}
+	if len(byBind) != 0 {
+		return nil, errors.New("--advertise mapping does not match a --listen endpoint")
+	}
+	return out, nil
+}
+
 func newRootParser() *argparse.Parser {
 	parser := argparse.NewParser("hovel", "Hovel operator console.")
+	parser.String("", "daemon-endpoint", &argparse.Options{Help: "Explicit daemon endpoint (Unix socket or tcp://host:port)"})
+	parser.String("", "daemon-connect-timeout", &argparse.Options{Help: "Daemon connection timeout, such as 2s"})
+	parser.Flag("", "allow-insecure-daemon", &argparse.Options{Help: "Acknowledge unencrypted, unauthenticated full-control TCP"})
 	for _, definition := range commandmode.NewApp().Registry().FirstSegments() {
 		parser.NewCommand(definition.Path[0], definition.Summary)
 	}
@@ -250,14 +456,16 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 }
 
 type runCommandArgs struct {
-	Workspace string
-	Config    string
-	Operation string
-	Chain     string
-	Command   []string
+	Workspace    string
+	WorkspaceSet bool
+	Config       string
+	ConfigSet    bool
+	Operation    string
+	Chain        string
+	Command      []string
 }
 
-func runDaemonCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runDaemonCommand(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
 	parsed, ok, code := parseRunCommandArgs(args, stdout, stderr)
 	if !ok {
 		return code
@@ -267,18 +475,20 @@ func runDaemonCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 	if valid, validationCode := commandmode.NewApp().Validate(commandArgs, stderr); !valid {
 		return validationCode
 	}
-	session, err := daemonlocal.NewManager().EnsureWithConfig(ctx, parsed.Workspace, "", parsed.Config)
+	workspace, configPath := daemonCommandClientContext(parsed, commandArgs)
+	options, err := daemonlocal.ResolveClientOptions(workspace, configPath, overrides)
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 1
+	}
+	requireFull := !isDaemonStatusCommand(commandArgs)
+	session, client, err := daemonlocal.Connect(ctx, workspace, "", configPath, options, requireFull)
 	if err != nil {
 		writeRootLine(stderr, err)
 		return 1
 	}
 	defer func() { logRootError("close daemon manager session", session.Close()) }()
 
-	client, err := daemonrpc.Dial(session.Status().Identity.SocketPath)
-	if err != nil {
-		writeRootLine(stderr, err)
-		return 1
-	}
 	defer func() { logRootError("close daemon rpc client", client.Close()) }()
 
 	operatorSession := daemonrpc.NewSessionClient(ctx, client)
@@ -294,13 +504,46 @@ func runDaemonCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 			return 1
 		}
 	}
-	catalog, err := (pythonrpc.Runner{WorkspacePath: parsed.Workspace, HovelConfig: parsed.Config}).Catalog(ctx)
-	if err != nil {
-		writeRootFormat(stderr, "hovel: failed to load module catalog: %v\n", err)
-		catalog = modulecatalog.New()
+	attached := strings.TrimSpace(options.Endpoint) != ""
+	var catalog modulecatalog.Catalog
+	if attached {
+		catalog, err = client.GetModuleCatalog(ctx)
+		if err != nil {
+			writeRootFormat(stderr, "hovel: failed to load daemon module catalog: %v\n", err)
+			catalog = modulecatalog.New()
+		}
+	} else {
+		catalog, err = (pythonrpc.Runner{WorkspacePath: workspace, HovelConfig: configPath}).Catalog(ctx)
+		if err != nil {
+			writeRootFormat(stderr, "hovel: failed to load module catalog: %v\n", err)
+			catalog = modulecatalog.New()
+		}
 	}
-	app := commandmode.NewAppWithSessionModulesAndWorkspace(operatorSession, catalog, parsed.Workspace)
+	app := commandmode.NewAppWithSessionModulesAndWorkspace(operatorSession, catalog, workspace)
+	if attached {
+		app = commandmode.NewAppWithAttachedDaemon(operatorSession, catalog, workspace, session.Status(), client)
+	}
 	return app.Run(ctx, commandArgs, stdout, stderr)
+}
+
+func daemonCommandClientContext(parsed runCommandArgs, commandArgs []string) (string, string) {
+	workspace := parsed.Workspace
+	if !parsed.WorkspaceSet {
+		if commandWorkspace := argumentValue(argsBeforePassthrough(commandArgs), "--workspace", "-w"); commandWorkspace != "" {
+			workspace = commandWorkspace
+		}
+	}
+	configPath := parsed.Config
+	if !parsed.ConfigSet {
+		if commandConfig := argumentValue(argsBeforePassthrough(commandArgs), "--config"); commandConfig != "" {
+			configPath = commandConfig
+		}
+	}
+	return workspace, configPath
+}
+
+func isDaemonStatusCommand(args []string) bool {
+	return len(args) >= 3 && args[0] == "control" && args[1] == "daemon" && args[2] == "status"
 }
 
 func parseRunCommandArgs(args []string, stdout, stderr io.Writer) (runCommandArgs, bool, int) {
@@ -327,9 +570,11 @@ func parseRunCommandArgs(args []string, stdout, stderr io.Writer) (runCommandArg
 				return runCommandArgs{}, false, 2
 			}
 			parsed.Workspace = args[1]
+			parsed.WorkspaceSet = true
 			args = args[2:]
 		case strings.HasPrefix(arg, "--workspace="):
 			parsed.Workspace = strings.TrimPrefix(arg, "--workspace=")
+			parsed.WorkspaceSet = true
 			args = args[1:]
 		case arg == "--config":
 			if len(args) < 2 {
@@ -337,9 +582,11 @@ func parseRunCommandArgs(args []string, stdout, stderr io.Writer) (runCommandArg
 				return runCommandArgs{}, false, 2
 			}
 			parsed.Config = args[1]
+			parsed.ConfigSet = true
 			args = args[2:]
 		case strings.HasPrefix(arg, "--config="):
 			parsed.Config = strings.TrimPrefix(arg, "--config=")
+			parsed.ConfigSet = true
 			args = args[1:]
 		case arg == "--op" || arg == "--operation":
 			if len(args) < 2 {
@@ -499,7 +746,7 @@ func newDaemonParser() *argparse.Parser {
 	return parser
 }
 
-func runMCP(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runMCP(ctx context.Context, args []string, overrides daemonlocal.ClientOverrides, stdout, stderr io.Writer) int {
 	parser := newMCPParser()
 	workspacePath := parser.String("w", "workspace", &argparse.Options{Help: "Workspace path"})
 	operation := parser.String("", "op", &argparse.Options{Help: "Operation context for this MCP operator"})
@@ -526,6 +773,11 @@ func runMCP(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if selectedOperation == "" {
 		selectedOperation = *operationAlias
 	}
+	clientOptions, err := daemonlocal.ResolveClientOptions(*workspacePath, *configPath, overrides)
+	if err != nil {
+		writeRootLine(stderr, err)
+		return 2
+	}
 	if err := mcpadapter.Run(ctx, mcpadapter.Config{
 		Workspace:     *workspacePath,
 		Operation:     selectedOperation,
@@ -538,6 +790,7 @@ func runMCP(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		TransportMode: selectedTransport,
 		HTTPAddr:      *httpAddr,
 		HovelConfig:   *configPath,
+		DaemonOptions: clientOptions,
 	}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return 0

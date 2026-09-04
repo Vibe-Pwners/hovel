@@ -26,6 +26,7 @@ import (
 	"github.com/vibepwners/hovel/internal/app/commands"
 	"github.com/vibepwners/hovel/internal/app/modulecatalog"
 	"github.com/vibepwners/hovel/internal/app/operatorsession"
+	"github.com/vibepwners/hovel/internal/domain/daemon"
 	operatordomain "github.com/vibepwners/hovel/internal/domain/operator"
 	"github.com/vibepwners/hovel/internal/domain/run"
 	"github.com/vibepwners/hovel/internal/domain/workspace"
@@ -108,6 +109,7 @@ type Config struct {
 	HovelConfig       string
 	ThrowStarter      ThrowStarter
 	CommandRunner     CommandRunner
+	DaemonOptions     daemonlocal.ClientOptions
 }
 
 type Server struct {
@@ -121,6 +123,7 @@ type Server struct {
 	hovelConfig   string
 	throwStarter  ThrowStarter
 	commandRunner CommandRunner
+	moduleCatalog func(context.Context) (modulecatalog.Catalog, error)
 }
 
 type OperatorOptions struct {
@@ -135,6 +138,7 @@ type OperatorOptions struct {
 	HovelConfig   string
 	ThrowStarter  ThrowStarter
 	CommandRunner CommandRunner
+	ModuleCatalog func(context.Context) (modulecatalog.Catalog, error)
 }
 
 func Run(ctx context.Context, cfg Config) error {
@@ -146,36 +150,45 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.Manager != nil {
 		manager = *cfg.Manager
 	}
-	session, err := manager.EnsureWithConfig(ctx, workspacePath, cfg.CatalogPath, cfg.HovelConfig)
+	dial := cfg.Dial
+	var session *daemonmanager.Session
+	var client Daemon
+	var err error
+	if dial == nil {
+		var rpcClient *daemonrpc.Client
+		session, rpcClient, err = daemonlocal.Connect(ctx, workspacePath, cfg.CatalogPath, cfg.HovelConfig, cfg.DaemonOptions, true)
+		client = rpcClient
+	} else {
+		session, err = manager.EnsureWithConfig(ctx, workspacePath, cfg.CatalogPath, cfg.HovelConfig)
+		if err == nil {
+			client, err = dial(ctx, session.Status().Identity.SocketPath)
+		}
+	}
 	if err != nil {
 		return err
 	}
 	defer func() { logMCPError("close daemon manager session", session.Close()) }()
-
-	dial := cfg.Dial
-	if dial == nil {
-		dial = func(ctx context.Context, socketPath string) (Daemon, error) {
-			return daemonrpc.Dial(socketPath)
-		}
-	}
-	client, err := dial(ctx, session.Status().Identity.SocketPath)
-	if err != nil {
-		return err
-	}
 	defer func() { logMCPError("close daemon client", client.Close()) }()
 	throwStarter := cfg.ThrowStarter
 	commandRunner := cfg.CommandRunner
+	attached := strings.TrimSpace(cfg.DaemonOptions.Endpoint) != ""
 	if throwStarter == nil {
 		if rpcClient, ok := client.(*daemonrpc.Client); ok {
-			throwStarter = commandModeThrowStarter(workspacePath, rpcClient, cfg.CatalogPath, cfg.HovelConfig)
+			throwStarter = commandModeThrowStarter(workspacePath, rpcClient, cfg.CatalogPath, cfg.HovelConfig, attached)
 		}
 	}
 	if commandRunner == nil {
 		if rpcClient, ok := client.(*daemonrpc.Client); ok {
-			commandRunner = commandModeCommandRunner(workspacePath, rpcClient, cfg.CatalogPath, cfg.HovelConfig)
+			commandRunner = commandModeCommandRunner(workspacePath, rpcClient, cfg.CatalogPath, cfg.HovelConfig, attached)
 		}
 	}
 
+	var remoteModuleCatalog func(context.Context) (modulecatalog.Catalog, error)
+	if attached {
+		if rpcClient, ok := client.(*daemonrpc.Client); ok {
+			remoteModuleCatalog = rpcClient.GetModuleCatalog
+		}
+	}
 	operator, err := Attach(ctx, client, OperatorOptions{
 		EntityID:      cfg.EntityID,
 		DisplayName:   cfg.DisplayName,
@@ -188,6 +201,7 @@ func Run(ctx context.Context, cfg Config) error {
 		HovelConfig:   cfg.HovelConfig,
 		ThrowStarter:  throwStarter,
 		CommandRunner: commandRunner,
+		ModuleCatalog: remoteModuleCatalog,
 	})
 	if err != nil {
 		return err
@@ -256,6 +270,7 @@ func Attach(ctx context.Context, daemon Daemon, opts OperatorOptions) (*Server, 
 		hovelConfig:   strings.TrimSpace(opts.HovelConfig),
 		throwStarter:  opts.ThrowStarter,
 		commandRunner: opts.CommandRunner,
+		moduleCatalog: opts.ModuleCatalog,
 	}, nil
 }
 
@@ -2320,7 +2335,8 @@ func (s *Server) heartbeatLoop(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func commandModeThrowStarter(workspacePath string, client *daemonrpc.Client, catalogPath, hovelConfig string) ThrowStarter {
+func commandModeThrowStarter(workspacePath string, client *daemonrpc.Client, catalogPath, hovelConfig string, attachedOptions ...bool) ThrowStarter {
+	attached := len(attachedOptions) != 0 && attachedOptions[0]
 	return func(ctx context.Context, input throwStartInput) (throwStartOutput, error) {
 		if !input.NowBypass {
 			return throwStartOutput{}, errors.New("nowBypass=true is required")
@@ -2353,7 +2369,19 @@ func commandModeThrowStarter(workspacePath string, client *daemonrpc.Client, cat
 		if err != nil {
 			return throwStartOutput{}, err
 		}
-		code := commandmode.NewAppWithSessionModulesAndWorkspace(session, catalog, workspacePath).Run(ctx, args, &stdout, &stderr)
+		app := commandmode.NewAppWithSessionModulesAndWorkspace(session, catalog, workspacePath)
+		if attached {
+			catalog, err = client.GetModuleCatalog(ctx)
+			if err != nil {
+				return throwStartOutput{}, err
+			}
+			status, statusErr := attachedDaemonStatus(ctx, workspacePath, client)
+			if statusErr != nil {
+				return throwStartOutput{}, statusErr
+			}
+			app = commandmode.NewAppWithAttachedDaemon(session, catalog, workspacePath, status, client)
+		}
+		code := app.Run(ctx, args, &stdout, &stderr)
 		if code != 0 {
 			message := strings.TrimSpace(stderr.String())
 			if message == "" {
@@ -2380,7 +2408,8 @@ func commandModeThrowStarter(workspacePath string, client *daemonrpc.Client, cat
 	}
 }
 
-func commandModeCommandRunner(workspacePath string, client *daemonrpc.Client, catalogPath, hovelConfig string) CommandRunner {
+func commandModeCommandRunner(workspacePath string, client *daemonrpc.Client, catalogPath, hovelConfig string, attachedOptions ...bool) CommandRunner {
+	attached := len(attachedOptions) != 0 && attachedOptions[0]
 	return func(ctx context.Context, input commandRunInput) (commandRunOutput, error) {
 		session := daemonrpc.NewSessionClient(ctx, client)
 		operation := strings.TrimSpace(input.Operation)
@@ -2402,8 +2431,20 @@ func commandModeCommandRunner(workspacePath string, client *daemonrpc.Client, ca
 		if err != nil {
 			return commandRunOutput{}, err
 		}
+		app := commandmode.NewAppWithSessionModulesAndWorkspace(session, catalog, workspacePath)
+		if attached {
+			catalog, err = client.GetModuleCatalog(ctx)
+			if err != nil {
+				return commandRunOutput{}, err
+			}
+			status, statusErr := attachedDaemonStatus(ctx, workspacePath, client)
+			if statusErr != nil {
+				return commandRunOutput{}, statusErr
+			}
+			app = commandmode.NewAppWithAttachedDaemon(session, catalog, workspacePath, status, client)
+		}
 		var stdout, stderr bytes.Buffer
-		code := commandmode.NewAppWithSessionModulesAndWorkspace(session, catalog, workspacePath).Run(ctx, args, &stdout, &stderr)
+		code := app.Run(ctx, args, &stdout, &stderr)
 		out := commandRunOutput{
 			Args:      append([]string(nil), args...),
 			Operation: operation,
@@ -2418,6 +2459,28 @@ func commandModeCommandRunner(workspacePath string, client *daemonrpc.Client, ca
 		}
 		return out, nil
 	}
+}
+
+func attachedDaemonStatus(ctx context.Context, endpoint string, client *daemonrpc.Client) (daemon.Status, error) {
+	info, err := client.GetDaemonInfo(ctx)
+	if err != nil {
+		return daemon.Status{}, err
+	}
+	startedAt, err := time.Parse(time.RFC3339Nano, info.StartedAt)
+	if err != nil {
+		return daemon.Status{}, err
+	}
+	if len(info.Listeners) != 0 && info.Listeners[0].Advertise != "" {
+		endpoint = info.Listeners[0].Advertise
+	}
+	identity, err := daemon.NewIdentity(daemon.IdentityArgs{
+		WorkspacePath: info.WorkspacePath, PID: info.PID, SocketPath: endpoint,
+		StartedAt: startedAt, Health: daemon.Health(info.Health),
+	})
+	if err != nil {
+		return daemon.Status{}, err
+	}
+	return daemon.Running(identity), nil
 }
 
 func normalizeMCPCommandArgs(args []string) []string {
@@ -2469,6 +2532,16 @@ func injectConfigForMCPCommand(args []string, configPath string) []string {
 }
 
 func (s *Server) mcpCommandCatalog(ctx context.Context, args []string) (modulecatalog.Catalog, error) {
+	if s.moduleCatalog != nil {
+		catalog, err := s.moduleCatalog(ctx)
+		if err != nil {
+			if mcpCommandNeedsModules(args) {
+				return modulecatalog.Catalog{}, fmt.Errorf("load module catalog: %w", err)
+			}
+			return modulecatalog.New(), nil
+		}
+		return catalog, nil
+	}
 	return mcpCommandCatalog(ctx, args, s.catalogPath, s.hovelConfig, s.workspace)
 }
 

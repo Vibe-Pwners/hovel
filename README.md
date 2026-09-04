@@ -7,12 +7,15 @@ lab exercises, defensive validation, and operator workflow automation. It is
 designed for scoped, auditable assessments rather than general-purpose dual-use
 automation.
 
-The local daemon role (`hovel daemon serve`, often called `hoveld` in docs and
-logs) owns the workspace database, module process lifecycle, persisted throw
+The daemon role (`hovel daemon serve`, often called `hoveld` in docs and logs)
+owns the workspace database, module process lifecycle, persisted throw
 plans, confirmation records, installed payload inventory, artifacts, sessions,
 Mesh listener/task/stream bookkeeping, encrypted workspace PKI custody, and
 structured events. Operators use the same application services through the
 interactive CLI, one-shot saved-chain execution, and the MCP agent front end.
+Managed local use defaults to an owner-only Unix socket; explicit daemon and
+client configuration also supports TCP between containers on a protected
+network.
 
 > **Authorized red-team emulation only.** Use Hovel only in environments you own
 > or are explicitly authorized to assess, with written scope and approvals. See
@@ -36,6 +39,13 @@ Contributors should read the
 [Development Guide](docs/site/src/content/spec/development-guide.html) for Task, CI, and
 partial-checkout behavior. The source for the book lives under
 [`docs/site/src/content/`](docs/site/src/content/).
+
+For split-container deployments, see
+[Connect Across Containers](docs/site/src/content/spec/user-guide.html#connect-across-containers)
+for a working server/client recipe and the
+[Daemon RPC transport reference](docs/site/src/content/spec/daemon-rpc.html#transport)
+for listener precedence, access modes, environment variables, and the plaintext
+TCP security model.
 
 The official [Agent Integrations](docs/site/src/content/spec/agent-integrations.html)
 package Hovel skills and MCP configuration for Claude Code, Codex, and OpenCode:

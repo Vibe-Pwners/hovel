@@ -23,7 +23,7 @@
         <p>The domain package must not import CLI, TUI, REST, MCP, storage, RPC, concrete module code, or concrete service code.</p>
 
         <h2>Engine</h2>
-        <p><code>hoveld</code> is the local engine role and is not optional. It is served by the <code>hovel</code> mono-binary rather than a separate production binary. User-facing commands may bootstrap it, but execution happens through the daemon role.</p>
+        <p><code>hoveld</code> is the engine role and is not optional. It is served by the <code>hovel</code> mono-binary rather than a separate production binary. User-facing commands may bootstrap it locally or attach to an explicitly configured daemon endpoint, but execution happens through the daemon role.</p>
         <p>It owns:</p>
         <ol>
           <li>Workspace database.</li>
@@ -50,23 +50,24 @@ hovel tui ...              # not implemented yet
         <p><code>cli</code> and, once implemented, <code>tui</code> must auto-start or attach to the daemon role in local mode. The root CLI also accepts compatibility and developer entrypoints such as <code>shell</code>, <code>command</code>, <code>run</code>, direct registry roots, <code>init</code>, and <code>status</code>, but they are not the durable product contract. Shell one-shot execution is limited to saved chain files and daemon-management commands.</p>
 <pre data-lang="modes"><code>managed local mode: hovel cli starts or uses a local daemon
 future TUI mode:     hovel tui will start or use a local daemon when implemented
-one-shot mode:      hovel throw &lt;chain-file&gt; prompts for confirmation unless --now is passed
-server mode: hovel daemon serve is explicitly launched and clients attach
+one-shot mode:       hovel throw &lt;chain-file&gt; prompts for confirmation unless --now is passed
+container mode:      clients attach to an explicit TCP endpoint on a protected network
+server mode:         hovel daemon serve is explicitly launched and clients attach
 </code></pre>
-        <p>Local managed-daemon mode is the implemented default for operator workflows.</p>
+        <p>Local managed-daemon mode is the implemented default for operator workflows. Explicit TCP attachment supports split-container deployments without changing which daemon owns the workspace.</p>
 
         <h2>Daemon Contract</h2>
-        <p>Daemon-backed <code>hovel</code> operations must resolve a workspace, locate the matching local daemon, wait until it is healthy, then execute through application services. <code>cli</code> and, once implemented, <code>tui</code> may start a managed daemon when none exists. One-shot chain-file execution may start or attach to a local daemon, but it must use the same planning, confirmation, event, artifact, and persistence path as interactive execution.</p>
+        <p>Daemon-backed <code>hovel</code> operations resolve either an explicit client endpoint or the matching managed local daemon, wait until it is healthy, then execute through application services. <code>cli</code> and, once implemented, <code>tui</code> may start a managed daemon when no explicit endpoint is selected and none exists locally. One-shot chain-file execution may start a local daemon or attach to a configured local or remote endpoint, but it must use the same planning, confirmation, event, artifact, and persistence path as interactive execution.</p>
         <p>Daemon rules:</p>
         <ol>
           <li>One active <code>hoveld</code> per workspace.</li>
           <li>A workspace lock prevents duplicate daemons from owning the same database.</li>
-          <li>The daemon RPC contract is the stable v1 front-end contract. It uses HTTP POST with JSON request and response bodies over the local transport, is documented in <a href="daemon-rpc.html">Daemon RPC Contract</a>, and has a machine-readable OpenAPI artifact at <a href="reference/daemon-rpc.openapi.json"><code>reference/daemon-rpc.openapi.json</code></a>.</li>
-          <li>The local client transport must support <code>cli</code>, one-shot chain-file execution, <code>tui</code>, REST, and MCP attaching to the same daemon.</li>
+          <li>The daemon RPC contract is the stable v1 front-end contract. It uses HTTP POST with JSON request and response bodies over configured Unix or TCP transport, is documented in <a href="daemon-rpc.html">Daemon RPC Contract</a>, and has a machine-readable OpenAPI artifact at <a href="reference/daemon-rpc.openapi.json"><code>reference/daemon-rpc.openapi.json</code></a>.</li>
+          <li>The client transport must support <code>cli</code>, one-shot chain-file execution, <code>tui</code>, REST, and MCP attaching to the same daemon.</li>
           <li>Unix-like systems should prefer a Unix domain socket under a workspace or runtime directory with filesystem permissions.</li>
-          <li>Explicit daemon serving may also bind TCP with an address such as <code>tcp://127.0.0.1:9090</code> for integration and remote-adapter development.</li>
+          <li>Explicit daemon serving may bind multiple Unix and TCP listeners. TCP defaults to read-only; full-control TCP requires explicit server configuration and client acknowledgement and is suitable only for separately protected container or private networks.</li>
           <li>Windows should use a named pipe when Windows support is implemented.</li>
-          <li>Daemon identity, socket path or listen endpoint, PID, start time, and health status should be inspectable with <code>hovel daemon status</code> and from the shared registry as <code>control daemon status</code>.</li>
+          <li>Daemon identity, listener endpoints, PID, start time, and health status should be inspectable with <code>hovel daemon status</code> and from the shared registry as <code>control daemon status</code>.</li>
           <li>Tests may use an in-process engine harness, but production commands should exercise the daemon boundary.</li>
           <li>Contract tests should keep the OpenAPI paths and human docs aligned with the registered daemon methods, while behavior tests prove throw, launch-key, session, log, and payload flows through the daemon boundary.</li>
           <li>Mock exploit modules must not perform network exploitation. They exist in-tree for tests and examples, should exercise the same module-loading path as ordinary modules where practical, and are not part of the final shipped module catalog.</li>
@@ -288,5 +289,5 @@ hovel throw &lt;chain-file&gt; --now
 
         <h2>Test Harness</h2>
         <p>Application services must be constructible in-process for unit, contract, and integration tests. The in-process harness should use the same domain logic, guardrail checks, event bus contracts, descriptor validation, and storage interfaces as <code>hoveld</code>.</p>
-        <p>Production <code>hovel cli</code>, one-shot chain-file execution, and future <code>hovel tui</code> behavior should still cross the daemon boundary for daemon-backed operations. Tests may use the in-process harness to keep core behavior fast and deterministic, but daemon-contract tests must verify workspace locking, daemon discovery, managed daemon ownership, health checks, client attachment, and execution through the local transport.</p>
+        <p>Production <code>hovel cli</code>, one-shot chain-file execution, and future <code>hovel tui</code> behavior should still cross the daemon boundary for daemon-backed operations. Tests may use the in-process harness to keep core behavior fast and deterministic, but daemon-contract tests must verify workspace locking, daemon discovery, managed daemon ownership, health checks, client attachment, and execution through configured Unix and TCP transports.</p>
       </article>

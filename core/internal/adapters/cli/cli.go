@@ -25,6 +25,7 @@ import (
 	"github.com/vibepwners/hovel/internal/app/modulepackage"
 	"github.com/vibepwners/hovel/internal/app/operatorlog"
 	"github.com/vibepwners/hovel/internal/app/operatorsession"
+	"github.com/vibepwners/hovel/internal/domain/daemon"
 	domainpki "github.com/vibepwners/hovel/internal/domain/pki"
 	"github.com/vibepwners/hovel/internal/domain/run"
 	"github.com/vibepwners/hovel/internal/domain/workspace"
@@ -35,6 +36,13 @@ import (
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return NewApp().Run(ctx, args, stdout, stderr)
+}
+
+func RunWithDaemonOptions(ctx context.Context, args []string, configPath string, options daemonlocal.ClientOptions, stdout, stderr io.Writer) int {
+	app := NewApp()
+	app.clientOptions = options
+	app.hovelConfig = configPath
+	return app.Run(ctx, args, stdout, stderr)
 }
 
 type App struct {
@@ -50,6 +58,10 @@ type App struct {
 	workspacePath   string
 	surface         *promptSurface
 	workspaceIDs    map[string]bool
+	clientOptions   daemonlocal.ClientOptions
+	hovelConfig     string
+	daemonStatus    daemon.Status
+	attachedDaemon  bool
 }
 
 func NewApp() App {
@@ -89,20 +101,26 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 	a.workspacePath = workspace.ResolvePath(workspacePath)
 
-	session, err := a.EnsureDaemon(ctx, a.workspacePath)
+	session, daemonClient, err := daemonlocal.Connect(ctx, a.workspacePath, "", a.hovelConfig, a.clientOptions, true)
 	if err != nil {
 		writeCLILine(stderr, err)
 		return 1
 	}
 	defer func() { logCLIError("close daemon manager session", session.Close()) }()
 
-	daemonClient, err := daemonrpc.Dial(session.Status().Identity.SocketPath)
-	if err != nil {
-		writeCLILine(stderr, err)
-		return 1
-	}
 	defer func() { logCLIError("close daemon rpc client", daemonClient.Close()) }()
-	a = a.withDaemonSession(ctx, daemonClient)
+	if strings.TrimSpace(a.clientOptions.Endpoint) != "" {
+		if daemonModules, err := daemonClient.GetModuleCatalog(ctx); err == nil {
+			a.modules = daemonModules
+			a.moduleCount = len(daemonModules.List())
+		} else {
+			writeCLILine(stderr, err)
+			return 1
+		}
+		a = a.withAttachedDaemonSession(ctx, daemonClient, session.Status())
+	} else {
+		a = a.withDaemonSession(ctx, daemonClient)
+	}
 	if err := a.refreshWorkspaceModules(ctx); err != nil {
 		writeCLILine(stderr, err)
 		return 1
@@ -148,8 +166,31 @@ func (a App) withDaemonSession(ctx context.Context, client *daemonrpc.Client) Ap
 	return a
 }
 
+func (a App) withAttachedDaemonSession(ctx context.Context, client *daemonrpc.Client, status daemon.Status) App {
+	session := daemonrpc.NewSessionClient(ctx, client)
+	a.daemonClient = client
+	a.daemonStatus = status
+	a.attachedDaemon = true
+	a.session = session
+	a.commands = commandmode.NewAppWithAttachedDaemon(session, a.modules, a.workspacePath, status, client)
+	a.wizard = newInteractiveConfigWizard(session, a.modules)
+	return a
+}
+
 func (a *App) refreshWorkspaceModules(ctx context.Context) error {
 	workspacePath := workspace.ResolvePath(a.workspacePath)
+	if a.attachedDaemon {
+		a.commands = commandmode.NewAppWithAttachedDaemon(a.session, a.modules, workspacePath, a.daemonStatus, a.daemonClient)
+		if a.wizard == nil {
+			a.wizard = newInteractiveConfigWizard(a.session, a.modules)
+		} else {
+			a.wizard.session = a.session
+			a.wizard.modules = a.modules
+		}
+		a.moduleCount = len(a.modules.List())
+		a.refreshModuleInventory(ctx)
+		return nil
+	}
 	installed, err := installedWorkspaceModules(ctx, workspacePath)
 	if err != nil {
 		return err
@@ -2271,21 +2312,34 @@ func matchDefinition(registry commands.Registry, fields []string) (commands.Defi
 }
 
 func parseArgs(args []string, stdout, stderr io.Writer) (string, bool, int) {
-	switch len(args) {
-	case 0:
-		return "", true, 0
-	case 1:
-		if args[0] == "-h" || args[0] == "--help" {
-			writeCLIText(stdout, "Usage: hovel cli [--workspace <path>]\n\nLaunch the interactive Hovel prompt shell.\n")
+	workspacePath := ""
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "-h" || args[i] == "--help":
+			writeCLIText(stdout, "Usage: hovel cli [--workspace <path>] [--config <path>]\n\nLaunch the interactive Hovel prompt shell.\n")
 			return "", false, 0
-		}
-	case 2:
-		if args[0] == "--workspace" || args[0] == "-w" {
-			return args[1], true, 0
+		case args[i] == "--workspace" || args[i] == "-w":
+			if i+1 >= len(args) {
+				writeCLILine(stderr, args[i]+" requires a value")
+				return "", false, 2
+			}
+			i++
+			workspacePath = args[i]
+		case strings.HasPrefix(args[i], "--workspace="):
+			workspacePath = strings.TrimPrefix(args[i], "--workspace=")
+		case args[i] == "--config":
+			if i+1 >= len(args) {
+				writeCLILine(stderr, "--config requires a value")
+				return "", false, 2
+			}
+			i++
+		case strings.HasPrefix(args[i], "--config="):
+		default:
+			writeCLILine(stderr, "hovel cli starts the interactive shell; use hovel <command> for one-shot invocations")
+			return "", false, 2
 		}
 	}
-	writeCLILine(stderr, "hovel cli starts the interactive shell; use hovel <command> for one-shot invocations")
-	return "", false, 2
+	return workspacePath, true, 0
 }
 
 func isExit(line string) bool {

@@ -27,6 +27,14 @@ type IdentityArgs struct {
 	HovelConfig   string
 	StartedAt     time.Time
 	Health        Health
+	Listeners     []Listener
+}
+
+type Listener struct {
+	Network   string `json:"network"`
+	Bind      string `json:"bind"`
+	Advertise string `json:"advertise"`
+	Access    string `json:"access"`
 }
 
 type Identity struct {
@@ -36,6 +44,7 @@ type Identity struct {
 	HovelConfig   string
 	StartedAt     time.Time
 	Health        Health
+	Listeners     []Listener
 }
 
 func NewIdentity(args IdentityArgs) (Identity, error) {
@@ -63,6 +72,7 @@ func NewIdentity(args IdentityArgs) (Identity, error) {
 		HovelConfig:   strings.TrimSpace(args.HovelConfig),
 		StartedAt:     args.StartedAt,
 		Health:        args.Health,
+		Listeners:     append([]Listener(nil), args.Listeners...),
 	}, nil
 }
 

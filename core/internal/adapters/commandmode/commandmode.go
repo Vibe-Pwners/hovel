@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -97,6 +98,15 @@ func NewAppWithSessionAndModules(session commands.OperatorSession, modules modul
 
 func NewAppWithSessionModulesAndWorkspace(session commands.OperatorSession, modules modulecatalog.Catalog, workspacePath string) App {
 	return NewAppWithRuntime(defaultRuntimeWithCatalogAndWorkspace(session, modules, workspacePath))
+}
+
+func NewAppWithAttachedDaemon(session commands.OperatorSession, modules modulecatalog.Catalog, workspacePath string, status daemon.Status, client *daemonrpc.Client) App {
+	runtime := defaultRuntimeWithCatalogAndWorkspace(session, modules, workspacePath)
+	runtime.Daemons = attachedDaemonStatus{status: status}
+	runtime.Runs = attachedRunClients{client: client}
+	runtime.PendingThrows = attachedPendingThrows{client: client}
+	runtime.LaunchKeyPolicies = attachedLaunchKeyPolicies{client: client}
+	return NewAppWithRuntime(runtime)
 }
 
 func defaultRuntime(session commands.OperatorSession) commands.Runtime {
@@ -842,6 +852,54 @@ func commandPath(args []string) []string {
 }
 
 type daemonRunClients struct{}
+
+type attachedDaemonStatus struct{ status daemon.Status }
+
+func (s attachedDaemonStatus) Status(context.Context, services.DaemonStatusRequest) (daemon.Status, error) {
+	return s.status, nil
+}
+
+type attachedRunClients struct{ client *daemonrpc.Client }
+
+func (c attachedRunClients) DialRunClient(string) (commands.RunClient, error) {
+	if c.client == nil {
+		return nil, errors.New("attached daemon client is not configured")
+	}
+	return daemonRunClient(c), nil
+}
+
+type attachedPendingThrows struct{ client *daemonrpc.Client }
+
+func (c attachedPendingThrows) CreatePendingThrow(ctx context.Context, _ string, req commands.PendingThrowCreateRequest) (commands.PendingThrowSnapshot, error) {
+	resp, err := c.client.CreatePendingThrow(ctx, daemonrpc.CreatePendingThrowRequest{
+		ID: req.ID, Operation: req.Operation, Chain: req.Chain, PlanHash: req.PlanHash,
+		AllowDangerous: req.AllowDangerous, NowBypass: req.NowBypass,
+	})
+	return pendingThrowSnapshot(resp), err
+}
+
+func (c attachedPendingThrows) RequirePendingThrowReady(ctx context.Context, _ string, id string) (commands.PendingThrowSnapshot, error) {
+	resp, err := c.client.RequirePendingThrowReady(ctx, daemonrpc.PendingThrowRequest{ID: id})
+	return pendingThrowSnapshot(resp), err
+}
+
+func (c attachedPendingThrows) CancelPendingThrow(ctx context.Context, _ string, id string) error {
+	return c.client.CancelPendingThrow(ctx, daemonrpc.PendingThrowRequest{ID: id})
+}
+
+type attachedLaunchKeyPolicies struct{ client *daemonrpc.Client }
+
+func (c attachedLaunchKeyPolicies) GetLaunchKeyPolicy(ctx context.Context, _ string, operation string) (commands.LaunchKeyPolicySnapshot, error) {
+	resp, err := c.client.GetLaunchKeyPolicy(ctx, daemonrpc.LaunchKeyPolicyRequest{Operation: operation})
+	return launchKeyPolicySnapshot(resp), err
+}
+
+func (c attachedLaunchKeyPolicies) SetLaunchKeyPolicy(ctx context.Context, _ string, req commands.LaunchKeyPolicySetRequest) (commands.LaunchKeyPolicySnapshot, error) {
+	resp, err := c.client.SetLaunchKeyPolicy(ctx, daemonrpc.SetLaunchKeyPolicyRequest{
+		Operation: req.Operation, Mode: req.Mode, Quorum: req.Quorum, HeartbeatTimeout: req.HeartbeatTimeout,
+	})
+	return launchKeyPolicySnapshot(resp), err
+}
 
 type daemonPendingThrows struct{}
 type daemonLaunchKeyPolicies struct{}
