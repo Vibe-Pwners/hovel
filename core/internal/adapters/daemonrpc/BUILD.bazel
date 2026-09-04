@@ -11,6 +11,7 @@ go_library(
     visibility = ["//:__subpackages__"],
     deps = [
         "//internal/app/launchkey",
+        "//internal/app/modulecatalog",
         "//internal/app/operatorlog",
         "//internal/app/operatorsession",
         "//internal/app/pki",

@@ -157,27 +157,80 @@ func TestTCPDaemonRPCIsLoopbackReadOnly(t *testing.T) {
 	}
 }
 
-func TestDaemonRPCTCPRejectsNonLoopbackBind(t *testing.T) {
+func TestTCPDaemonRPCInsecureFullRequiresClientAcknowledgement(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := services.NewRunService(
+		mockexploit.Runner{}, discardEvents{},
+		&sequenceIDs{values: []string{"run-1", "event-1", "event-2"}},
+		fixedClock{now: time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)},
+	)
+	handler, err := NewHandler(runs, WithPrivilegedControl(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: WithTransportAccess(handler, TransportAccessInsecureFull)}
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Logf("serve test daemon: %v", err)
+		}
+	}()
+	t.Cleanup(func() {
+		if err := server.Close(); err != nil {
+			t.Errorf("close server: %v", err)
+		}
+	})
+	endpoint := "tcp://" + listener.Addr().String()
+
+	readOnly, err := Dial(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestClient(t, readOnly)
+	if _, err := readOnly.RunMockExploit(context.Background(), RunMockExploitRequest{ModuleID: "mock-exploit", Target: "mock://target"}); err == nil {
+		t.Fatal("unacknowledged client received privileged TCP access")
+	}
+
+	full, err := DialWithOptions(endpoint, DialOptions{AcknowledgeInsecureFullControl: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestClient(t, full)
+	if _, err := full.RunMockExploit(context.Background(), RunMockExploitRequest{ModuleID: "mock-exploit", Target: "mock://target"}); err != nil {
+		t.Fatalf("acknowledged insecure-full call: %v", err)
+	}
+}
+
+func TestDaemonRPCTCPAcceptsRemoteBindsButClientsRejectWildcardAddresses(t *testing.T) {
 	for _, endpoint := range []string{
 		"tcp://0.0.0.0:8080",
 		"http://192.0.2.10:8080",
 		"[::]:8080",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
-			if _, err := ParseEndpoint(endpoint); err == nil || !strings.Contains(err.Error(), "loopback") {
-				t.Fatalf("ParseEndpoint(%q) error = %v, want loopback rejection", endpoint, err)
+			if _, err := ParseEndpoint(endpoint); err != nil {
+				t.Fatalf("ParseEndpoint(%q) error = %v", endpoint, err)
 			}
 		})
 	}
 
 	for _, endpoint := range []string{
-		"tcp://127.0.0.1:8080",
-		"http://localhost:8080",
-		"[::1]:8080",
+		"tcp://0.0.0.0:8080",
+		"[::]:8080",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
-			if _, err := ParseEndpoint(endpoint); err != nil {
-				t.Fatalf("ParseEndpoint(%q) error = %v", endpoint, err)
+			if _, err := ParseClientEndpoint(endpoint); err == nil || !strings.Contains(err.Error(), "unspecified") {
+				t.Fatalf("ParseClientEndpoint(%q) error = %v, want unspecified-host rejection", endpoint, err)
+			}
+		})
+	}
+
+	for _, endpoint := range []string{"tcp://hoveld:8080", "http://192.0.2.10:8080", "[2001:db8::1]:8080"} {
+		t.Run(endpoint, func(t *testing.T) {
+			if _, err := ParseClientEndpoint(endpoint); err != nil {
+				t.Fatalf("ParseClientEndpoint(%q) error = %v", endpoint, err)
 			}
 		})
 	}

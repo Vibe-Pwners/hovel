@@ -129,6 +129,42 @@ policy:
 	}
 }
 
+func TestLoadMergesDaemonListenersAndClientConfiguration(t *testing.T) {
+	root := t.TempDir()
+	global := writeFile(t, root, "global.yaml", `apiVersion: hovel.dev/v1alpha1
+kind: HovelConfig
+daemon:
+  listeners:
+    - bind: unix:/tmp/hoveld.sock
+      access: owner
+  client:
+    endpoint: tcp://old:9090
+    connectTimeout: 1s
+`)
+	explicit := writeFile(t, root, "explicit.yaml", `apiVersion: hovel.dev/v1alpha1
+kind: HovelConfig
+daemon:
+  listeners:
+    - bind: tcp://0.0.0.0:9090
+      advertise: tcp://hoveld:9090
+      access: insecure-full
+  client:
+    endpoint: tcp://hoveld:9090
+    allowInsecureFullControl: true
+`)
+
+	config, _, err := Load(Options{GlobalPath: global, ExplicitPath: explicit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Daemon.Listeners) != 1 || config.Daemon.Listeners[0].Advertise != "tcp://hoveld:9090" {
+		t.Fatalf("daemon listeners = %#v", config.Daemon.Listeners)
+	}
+	if config.Daemon.Client.Endpoint != "tcp://hoveld:9090" || !config.Daemon.Client.AllowInsecureFullControl || config.Daemon.Client.ConnectTimeout != "1s" {
+		t.Fatalf("daemon client = %#v", config.Daemon.Client)
+	}
+}
+
 func writeFile(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

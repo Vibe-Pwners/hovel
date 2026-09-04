@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/vibepwners/hovel/internal/infra/daemonruntime"
 	"github.com/vibepwners/hovel/internal/version"
 )
 
@@ -215,7 +217,7 @@ func TestRootHelpShowsRoleMenu(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
 	}
 	output := stdout.String()
-	for _, want := range []string{"hovel", "op", "chain", "module", "artifact", "target", "throw", "shell", "command", "run", "cli", "mcp", "agent", "version", "daemon", "tui"} {
+	for _, want := range []string{"hovel", "op", "chain", "module", "artifact", "target", "throw", "shell", "command", "run", "cli", "mcp", "agent", "version", "daemon", "tui", "--daemon-endpoint", "--daemon-connect-timeout", "--allow-insecure-daemon"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help output missing %q:\n%s", want, output)
 		}
@@ -337,10 +339,28 @@ func TestDaemonServeHelpShowsOptions(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
 	}
 	output := stdout.String()
-	for _, want := range []string{"daemon serve", "--workspace", "--socket", "--listen"} {
+	for _, want := range []string{"daemon serve", "--workspace", "--socket", "--listen", "--advertise", "--allow-insecure-tcp"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestDaemonListenerSpecsApplyAdvertiseAndInsecureAccess(t *testing.T) {
+	listeners, err := daemonListenerSpecs(
+		[]string{"unix:/tmp/hoveld.sock", "tcp://0.0.0.0:9090"},
+		[]string{"tcp://0.0.0.0:9090=tcp://hoveld:9090"},
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []daemonruntime.ListenerSpec{
+		{Bind: "unix:/tmp/hoveld.sock"},
+		{Bind: "tcp://0.0.0.0:9090", Advertise: "tcp://hoveld:9090", Access: "insecure-full"},
+	}
+	if !reflect.DeepEqual(listeners, want) {
+		t.Fatalf("listeners = %#v, want %#v", listeners, want)
 	}
 }
 

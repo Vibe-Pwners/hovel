@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -288,5 +289,98 @@ func TestDaemonServeStopsOnContextCancellationAndClearsWorkspaceState(t *testing
 	}
 	if _, err := os.Stat(workspacePath + "/hoveld.sock"); !os.IsNotExist(err) {
 		t.Fatalf("socket still exists or stat failed unexpectedly: %v", err)
+	}
+}
+
+func TestRemoteRunUsesAcknowledgedInsecureTCPWithoutSharedWorkspace(t *testing.T) {
+	serverWorkspace := testsupport.TempDir(t)
+	clientWorkspace := testsupport.TempDir(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	codes := make(chan int, 1)
+	var daemonStdout, daemonStderr bytes.Buffer
+	go func() {
+		codes <- Run(ctx, []string{
+			"daemon", "serve", "--workspace", serverWorkspace,
+			"--listen", "tcp://" + address, "--allow-insecure-tcp",
+		}, &daemonStdout, &daemonStderr)
+	}()
+	defer func() {
+		cancel()
+		if code := <-codes; code != 0 {
+			t.Fatalf("daemon exit code = %d, stderr = %s", code, daemonStderr.String())
+		}
+	}()
+	testsupport.WaitFor(t, func() bool {
+		status, err := filesystem.NewWorkspaceStore().DaemonStatus(context.Background(), serverWorkspace)
+		return err == nil && status.State == daemon.StateRunning
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{
+		"--daemon-endpoint", "tcp://" + address,
+		"--allow-insecure-daemon",
+		"run", "--workspace", clientWorkspace, "--", "op", "create", "remote-op",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("remote command exit code = %d, stdout = %s, stderr = %s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestRemoteReadOnlyTCPAllowsStatusAndRejectsMutation(t *testing.T) {
+	serverWorkspace := testsupport.TempDir(t)
+	clientWorkspace := testsupport.TempDir(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	codes := make(chan int, 1)
+	var daemonStdout, daemonStderr bytes.Buffer
+	go func() {
+		codes <- Run(ctx, []string{
+			"daemon", "serve", "--workspace", serverWorkspace,
+			"--listen", "tcp://" + address,
+		}, &daemonStdout, &daemonStderr)
+	}()
+	defer func() {
+		cancel()
+		if code := <-codes; code != 0 {
+			t.Fatalf("daemon exit code = %d, stderr = %s", code, daemonStderr.String())
+		}
+	}()
+	testsupport.WaitFor(t, func() bool {
+		status, err := filesystem.NewWorkspaceStore().DaemonStatus(context.Background(), serverWorkspace)
+		return err == nil && status.State == daemon.StateRunning
+	})
+
+	var statusOut, statusErr bytes.Buffer
+	if code := Run(context.Background(), []string{
+		"--daemon-endpoint", "tcp://" + address,
+		"status", "--workspace", clientWorkspace, "--json",
+	}, &statusOut, &statusErr); code != 0 {
+		t.Fatalf("remote status exit code = %d, stdout = %s, stderr = %s", code, statusOut.String(), statusErr.String())
+	}
+	if !strings.Contains(statusOut.String(), serverWorkspace) {
+		t.Fatalf("remote status = %q, want daemon workspace %q", statusOut.String(), serverWorkspace)
+	}
+
+	var mutationOut, mutationErr bytes.Buffer
+	if code := Run(context.Background(), []string{
+		"--daemon-endpoint", "tcp://" + address,
+		"run", "--workspace", clientWorkspace, "--", "op", "create", "denied",
+	}, &mutationOut, &mutationErr); code == 0 || !strings.Contains(mutationErr.String(), "read-only") {
+		t.Fatalf("remote mutation exit code = %d, stdout = %s, stderr = %s", code, mutationOut.String(), mutationErr.String())
 	}
 }

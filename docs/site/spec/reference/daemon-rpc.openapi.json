@@ -16,8 +16,8 @@
       "description": "Logical base URL used by local Unix-domain-socket clients."
     },
     {
-      "url": "http://127.0.0.1:9090",
-      "description": "Example loopback TCP listener for trusted integration or remote-adapter development; it is not a public authenticated endpoint."
+      "url": "http://hoveld:9090",
+      "description": "Example container TCP listener. TCP is read-only unless both sides explicitly acknowledge insecure full control; it is not an authenticated endpoint."
     }
   ],
   "tags": [
@@ -47,6 +47,40 @@
     }
   ],
   "paths": {
+    "/hovel.daemon.v1.DaemonService/GetDaemonInfo": {
+      "post": {
+        "tags": ["operator-session"],
+        "operationId": "GetDaemonInfo",
+        "requestBody": {"$ref": "#/components/requestBodies/EmptyRequest"},
+        "responses": {
+          "200": {
+            "description": "Daemon identity and listener metadata.",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DaemonInfo"}}}
+          },
+          "400": {"$ref": "#/components/responses/TextError"},
+          "405": {"$ref": "#/components/responses/TextError"},
+          "413": {"$ref": "#/components/responses/RequestTooLargeError"},
+          "500": {"$ref": "#/components/responses/TextError"}
+        }
+      }
+    },
+    "/hovel.daemon.v1.DaemonService/GetModuleCatalog": {
+      "post": {
+        "tags": ["execution"],
+        "operationId": "GetModuleCatalog",
+        "requestBody": {"$ref": "#/components/requestBodies/EmptyRequest"},
+        "responses": {
+          "200": {
+            "description": "Daemon-owned module catalog.",
+            "content": {"application/json": {"schema": {"type": "object", "required": ["modules"], "properties": {"modules": {"type": "array", "items": {"type": "object"}}}}}}
+          },
+          "400": {"$ref": "#/components/responses/TextError"},
+          "405": {"$ref": "#/components/responses/TextError"},
+          "413": {"$ref": "#/components/responses/RequestTooLargeError"},
+          "500": {"$ref": "#/components/responses/TextError"}
+        }
+      }
+    },
     "/hovel.daemon.v1.DaemonService/ExecuteModule": {
       "post": {
         "tags": [
@@ -4411,6 +4445,32 @@
       }
     },
     "schemas": {
+      "DaemonInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workspacePath", "pid", "startedAt", "health", "access"],
+        "properties": {
+          "workspacePath": {"type": "string"},
+          "pid": {"type": "integer"},
+          "startedAt": {"type": "string", "format": "date-time"},
+          "health": {"type": "string"},
+          "access": {"enum": ["owner", "read-only", "insecure-full"]},
+          "listeners": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["network", "bind", "advertise", "access"],
+              "properties": {
+                "network": {"enum": ["unix", "tcp"]},
+                "bind": {"type": "string"},
+                "advertise": {"type": "string"},
+                "access": {"enum": ["owner", "read-only", "insecure-full"]}
+              }
+            }
+          }
+        }
+      },
       "PKICredentialStampRequest": {
         "type": "object",
         "additionalProperties": false,

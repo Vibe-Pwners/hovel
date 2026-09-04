@@ -254,6 +254,10 @@ type Session struct {
 	closed bool
 }
 
+func NewAttachedSession(status daemon.Status) *Session {
+	return &Session{status: status}
+}
+
 func (s *Session) Status() daemon.Status {
 	return s.status
 }

@@ -56,6 +56,105 @@ func TestServeWritesStatusAndClearsOnCancel(t *testing.T) {
 	}
 }
 
+func TestServeSharesStateAcrossMultipleListeners(t *testing.T) {
+	workspacePath := shortTempDir(t)
+	first := workspacePath + "/first.sock"
+	second := workspacePath + "/second.sock"
+	ctx, cancel := context.WithCancel(context.Background())
+	errs := make(chan error, 1)
+	go func() {
+		errs <- Serve(ctx, runtimeTestArgs(Args{
+			WorkspacePath: workspacePath,
+			Listeners:     []ListenerSpec{{Bind: first}, {Bind: second}},
+			PID:           123, StartedAt: time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC),
+		}))
+	}()
+	defer func() {
+		cancel()
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}()
+	waitFor(t, func() bool {
+		firstClient, err := daemonrpc.Dial(first)
+		if err != nil {
+			return false
+		}
+		closeRuntimeClient(t, firstClient)
+		secondClient, err := daemonrpc.Dial(second)
+		if err != nil {
+			return false
+		}
+		closeRuntimeClient(t, secondClient)
+		return true
+	})
+
+	firstClient, err := daemonrpc.Dial(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntimeClient(t, firstClient)
+	if err := daemonrpc.NewSessionClient(context.Background(), firstClient).CreateOperation("shared"); err != nil {
+		t.Fatal(err)
+	}
+	secondClient, err := daemonrpc.Dial(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntimeClient(t, secondClient)
+	snapshot, err := secondClient.Snapshot(context.Background(), daemonrpc.SnapshotRequest{Operation: "shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, operation := range snapshot.State.Operations {
+		found = found || operation.Name == "shared"
+	}
+	if !found {
+		t.Fatalf("second-listener snapshot = %#v", snapshot.State)
+	}
+}
+
+func TestParseListenerEndpointsRequiresAdvertiseForWildcardAndEphemeralTCP(t *testing.T) {
+	parse := func(value string) (Endpoint, error) {
+		return Endpoint{Network: "tcp", Address: strings.TrimPrefix(value, "tcp://"), Display: value}, nil
+	}
+	for _, bind := range []string{"tcp://0.0.0.0:9090", "tcp://127.0.0.1:0"} {
+		if _, err := parseListenerEndpoints([]ListenerSpec{{Bind: bind}}, parse); err == nil || !strings.Contains(err.Error(), "advertised endpoint") {
+			t.Fatalf("parseListenerEndpoints(%q) error = %v, want advertised endpoint error", bind, err)
+		}
+	}
+
+	endpoints, err := parseListenerEndpoints([]ListenerSpec{{
+		Bind: "tcp://0.0.0.0:0", Advertise: "tcp://hoveld:0", Access: "insecure-full",
+	}}, parse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(endpoints) != 1 || endpoints[0].Advertise != "tcp://hoveld:0" || endpoints[0].Access != "insecure-full" {
+		t.Fatalf("endpoints = %#v", endpoints)
+	}
+}
+
+func TestParseListenerEndpointsDefaultsAccessByTransport(t *testing.T) {
+	parse := func(value string) (Endpoint, error) {
+		if strings.HasPrefix(value, "tcp://") {
+			return Endpoint{Network: "tcp", Address: strings.TrimPrefix(value, "tcp://"), Display: value}, nil
+		}
+		return Endpoint{Network: "unix", Address: strings.TrimPrefix(value, "unix:"), Display: value}, nil
+	}
+	endpoints, err := parseListenerEndpoints([]ListenerSpec{
+		{Bind: "unix:/tmp/hoveld.sock"},
+		{Bind: "tcp://127.0.0.1:9090"},
+	}, parse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if endpoints[0].Access != "owner" || endpoints[1].Access != "read-only" {
+		t.Fatalf("endpoint access = %q, %q", endpoints[0].Access, endpoints[1].Access)
+	}
+}
+
 func TestServeRejectsDuplicateWorkspace(t *testing.T) {
 	workspacePath := shortTempDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
