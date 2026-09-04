@@ -31,6 +31,16 @@ tcp://hoveld:9090
 </code></pre>
         <p><code>https://</code> endpoints are rejected. The owner-controlled Unix socket remains the default privileged control plane. TCP defaults to <code>read-only</code>, exposing only explicitly non-sensitive projections and returning typed <code>403 permission-denied</code> for privileged routes. A TCP listener may explicitly select <code>insecure-full</code>; privileged calls then also require the client to send <code>X-Hovel-Insecure-Full-Control: true</code>. That header is an operator acknowledgement, not authentication, and plain HTTP provides no confidentiality. Use this mode only on a separately protected container network. An authenticated public or cross-trust-boundary API remains out of scope.</p>
 
+        <table>
+          <thead>
+            <tr><th>Listener</th><th>Default access</th><th>Allowed access</th><th>Intended use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>unix:</code></td><td><code>owner</code></td><td><code>owner</code></td><td>Default local, privileged control plane protected by filesystem permissions</td></tr>
+            <tr><td><code>tcp://</code></td><td><code>read-only</code></td><td><code>read-only</code> or <code>insecure-full</code></td><td>Protected container or private networks; never a public security boundary</td></tr>
+          </tbody>
+        </table>
+
         <p>A representative container configuration is:</p>
 <pre data-lang="yaml"><code>daemon:
   listeners:
@@ -44,7 +54,18 @@ tcp://hoveld:9090
     allowInsecureFullControl: true
     connectTimeout: 2s
 </code></pre>
-        <p>Client selection is also available through <code>--daemon-endpoint</code>, <code>--allow-insecure-daemon</code>, and <code>--daemon-connect-timeout</code>, or the corresponding <code>HOVEL_DAEMON_ENDPOINT</code>, <code>HOVEL_DAEMON_ALLOW_INSECURE_FULL_CONTROL</code>, and <code>HOVEL_DAEMON_CONNECT_TIMEOUT</code> environment variables. Server listener arrays can be supplied as JSON in <code>HOVEL_DAEMON_LISTENERS</code>. Flags override environment values, which override merged Hovel configuration.</p>
+        <p>For server listeners, explicit <code>--listen</code> flags take precedence over <code>HOVEL_DAEMON_LISTENERS</code>, which takes precedence over <code>daemon.listeners</code> in merged Hovel configuration. Legacy <code>--socket</code> or single-listener configuration is considered next, followed by the workspace <code>hoveld.sock</code> default. <code>--socket</code> cannot be combined with <code>--listen</code> or <code>--advertise</code>.</p>
+        <p><code>--listen</code> is repeatable. <code>--advertise &lt;bind&gt;=&lt;endpoint&gt;</code> is also repeatable and must identify one of those binds with the same network type. A wildcard TCP host or port <code>0</code> requires an advertised endpoint with a concrete host; when its advertised port is <code>0</code>, the daemon substitutes the actual bound port. Advertisement records a dialable identity but does not configure DNS, publish a port, or select the endpoint for clients. Duplicate bind network/address pairs are rejected.</p>
+        <p><code>--allow-insecure-tcp</code> is a broad shortcut that changes every selected TCP listener to <code>insecure-full</code>. Prefer an explicit per-listener <code>access</code> value in YAML or JSON when listeners need different policies. Unix listeners accept only <code>owner</code>.</p>
+
+        <p>The environment representation of the same listener set is JSON:</p>
+<pre data-lang="shell"><code>export HOVEL_DAEMON_LISTENERS='[
+  {"bind":"unix:/srv/hovel/hoveld.sock","access":"owner"},
+  {"bind":"tcp://0.0.0.0:9090","advertise":"tcp://hoveld:9090","access":"read-only"}
+]'
+</code></pre>
+
+        <p>Client selection is available through <code>--daemon-endpoint</code>, <code>--allow-insecure-daemon</code>, and <code>--daemon-connect-timeout</code>, or the corresponding <code>HOVEL_DAEMON_ENDPOINT</code>, <code>HOVEL_DAEMON_ALLOW_INSECURE_FULL_CONTROL</code>, and <code>HOVEL_DAEMON_CONNECT_TIMEOUT</code> environment variables. Client flags override environment values, which override <code>daemon.client</code> in merged Hovel configuration. A client must use <code>--allow-insecure-daemon</code>, the environment acknowledgement, or <code>allowInsecureFullControl: true</code> before privileged calls can use an <code>insecure-full</code> TCP listener.</p>
 <pre data-lang="shell"><code>hovel daemon serve --workspace /srv/hovel \
   --listen unix:/srv/hovel/hoveld.sock \
   --listen tcp://0.0.0.0:9090 \
@@ -56,6 +77,10 @@ hovel --daemon-endpoint tcp://hoveld:9090 \
   run --workspace /client-state -- op list --json
 </code></pre>
         <p>The same client options apply to direct commands, <code>run</code>, interactive <code>cli</code>, session attachment, and <code>mcp</code>. With an explicit endpoint, daemon identity, live operator state, module execution, logs, and sessions come from the remote daemon; local command inputs such as an import or export path are still interpreted by the front end that opened that file.</p>
+        <div class="callout warning" role="note">
+          <strong><code>insecure-full</code> is deliberately literal.</strong>
+          It enables the full daemon route set, including secret-bearing operations, over plaintext HTTP. The client acknowledgement header prevents accidental use; it does not provide authentication, authorization, confidentiality, integrity, or replay protection. Restrict reachability with a protected container or private network and do not expose the listener publicly or through a reverse proxy.
+        </div>
 
         <h2>HTTP Shape</h2>
         <p>Every method is a unary POST at <code>/hovel.daemon.v1.DaemonService/{Method}</code>. Requests and successful responses use <code>application/json</code>. Empty request and response types are the empty JSON object <code>{}</code>. Session bytes are encoded as base64 strings by Go JSON because the fields are <code>[]byte</code>.</p>
@@ -69,7 +94,7 @@ Content-Type: application/json
 
         <h2>Daemon-Owned State</h2>
         <p><code>hoveld</code> owns operation, chain, target, config, log, session, launch-key, payload, Mesh bookkeeping, and live entity state for a workspace. Front ends may keep local active selections for ergonomics, but authoritative mutation goes through daemon methods. The default operation name is <code>default</code> when callers omit an operation where the server accepts that fallback.</p>
-        <p>Mesh listener lifecycle, task, stream, and bridge calls are recorded in daemon memory with the relevant listener, route, node, destination, session, state, and timestamps. Listener lifecycle records carry the start or stop action and provider-reported state. Bridge records additionally carry the daemon-owned local address; raw task and stream requests cannot supply that audit field. Privileged front ends can inspect the audit surface with <code>ListMeshOperations</code> over the owner Unix transport instead of guessing which listening post, local bridge, or session belongs to a routed Mesh operation.</p>
+        <p>Mesh listener lifecycle, task, stream, and bridge calls are recorded in daemon memory with the relevant listener, route, node, destination, session, state, and timestamps. Listener lifecycle records carry the start or stop action and provider-reported state. Bridge records additionally carry the daemon-owned local address; raw task and stream requests cannot supply that audit field. Privileged front ends can inspect the audit surface with <code>ListMeshOperations</code> over an owner Unix listener or explicitly acknowledged <code>insecure-full</code> TCP listener instead of guessing which listening post, local bridge, or session belongs to a routed Mesh operation.</p>
         <p>Listening-post configuration is write-only. <code>StartMeshListener</code> accepts provider-specific <code>config</code>, but Hovel does not copy it into listener responses or Mesh operation records. Providers must also avoid including configuration or credentials in their own errors and logs. Callers select the stable <code>listenerId</code>, which makes lifecycle retries idempotent. Listener IDs are scoped to a provider Mesh, so external clients use <code>moduleId</code> plus <code>listenerId</code> as the durable daemon-wide correlation key.</p>
         <p>Active Mesh mutations can carry an optional <code>credentials</code> array of non-secret assignment, slot, projection, and form selectors. When present, <code>credentialContext</code> is also required and must set <code>approveCredentialUse</code> to <code>true</code>. The daemon derives the permitted provider, listener, and node consumers; validates the active assignment and current provider descriptor; and delivers material only to the same process that performs the Mesh call. Keep the selector <code>requestId</code>, credential-context <code>operationId</code>, and operation inputs stable for retries. The current external selector path supports direct runtime certificate DER, public-key SPKI, and private-key PKCS #8 projections; it never returns resolved bytes. See <a href="mesh-development.html#using-mesh-credentials">the worked provider and front-end example</a>.</p>
         <p>Workspace PKI follows the same rule. The daemon owns custody, certificate inventory, signing leases, and audit identity; front ends call the typed PKI methods instead of opening the SQLite database or master-key files. Mutating requests carry an explicit <code>context</code> with actor, operation, and correlation identifiers. Signing unlock and private-key export require separate approval booleans, so possession of the local API alone does not imply approval for a secret-bearing operation.</p>
@@ -172,7 +197,7 @@ Content-Type: application/json
     "consumerTracking": "all-tracked"
   }
 }</code></pre>
-        <p><code>ExportPKIBundle</code> is the only current daemon response that can contain private key bytes. The daemon refuses private export on non-confidential transports, requires <code>approvePrivateKeyExport</code>, audits the attempt, and marks both successful and rejected responses <code>Cache-Control: no-store</code>. Inventory and inspect methods never return private-key material.</p>
+        <p><code>ExportPKIBundle</code> is the only current daemon response that can contain private key bytes. The daemon refuses private export on read-only transport, requires <code>approvePrivateKeyExport</code>, audits the attempt, and marks both successful and rejected responses <code>Cache-Control: no-store</code>. An acknowledged <code>insecure-full</code> TCP listener permits the response but does not make it confidential; protect the network accordingly. Inventory and inspect methods never return private-key material.</p>
         <p>CLI, one-shot execution, MCP, and future front ends must not create parallel persistence or confirmation paths. A throw still needs a persisted plan and a recorded confirmation before execution, and dangerous modules still require the explicit dangerous-module allowance.</p>
         <p>This rule is fail-closed at the current direct Mesh task boundary. <code>RunMeshTask</code> accepts <code>survey</code>; command, upload, execute, <code>upload_execute</code>, load, stream-setup, and provider-defined task kinds return typed <code>permission-denied</code> before the provider hook runs. Those contracts remain available to Mesh provider SDKs so a future persisted-plan orchestrator can dispatch them without redesigning the provider API. Until that binding exists, clients must not attempt to recreate it with an in-memory approval flag or a second execution endpoint.</p>
 
@@ -292,7 +317,7 @@ Content-Type: application/json
             <tr><td>PKI</td><td><code>BeginPKIAuthorityRolloverFinalTrust</code></td><td>Admit a staged final trust generation after every required assignment activates a replacement-issued leaf.</td></tr>
             <tr><td>PKI</td><td><code>CompletePKIAuthorityRollover</code></td><td>Revision-fence and atomically activate final trust while retiring the previous authority.</td></tr>
             <tr><td>PKI</td><td><code>CancelPKIAuthorityRollover</code></td><td>Revision-fence and audit pre-activation cancellation, releasing reservations without changing active trust or authority state.</td></tr>
-            <tr><td>PKI</td><td><code>ExportPKIBundle</code></td><td>Resolve a versioned DER bundle for a purpose; private material requires approval and a confidential daemon transport.</td></tr>
+            <tr><td>PKI</td><td><code>ExportPKIBundle</code></td><td>Resolve a versioned DER bundle for a purpose; private material requires approval and a privileged listener, and plaintext TCP remains non-confidential.</td></tr>
             <tr><td>PKI</td><td><code>ListPKIAssignments</code></td><td>List logical consumer credential slots, their state, revision, and active or staged generation ids.</td></tr>
             <tr><td>PKI</td><td><code>InspectPKIAssignment</code></td><td>Resolve one assignment with its active/staged certificate and trust-set generations, without private material.</td></tr>
             <tr><td>PKI</td><td><code>BindPKIAssignment</code></td><td>Bind a typed consumer and purpose to a profile and optional active trust set.</td></tr>

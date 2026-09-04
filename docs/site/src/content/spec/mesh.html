@@ -278,11 +278,12 @@
   </p>
   <p>
     Live topology, beacon, listener, and Mesh operation records are sensitive
-    control-plane data. Their daemon RPC methods require the owner-controlled
-    Unix transport (or a future authenticated proxy with equivalent authority),
-    even though they are reads. The loopback TCP development endpoint is not a
-    local-user authentication mechanism and rejects these methods with
-    <code>permission-denied</code>.
+    control-plane data. Their daemon RPC methods require an owner Unix listener
+    or an explicitly acknowledged <code>insecure-full</code> TCP listener, even
+    though they are reads. Read-only TCP rejects these methods with
+    <code>permission-denied</code>. Plaintext full-control TCP is not an
+    authentication mechanism and is appropriate only on a separately protected
+    container or private network.
   </p>
 
   <h2>Safe certificate rotation</h2>

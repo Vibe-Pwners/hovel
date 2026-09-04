@@ -12,7 +12,7 @@
   </p>
 
   <div class="callout warning" role="note">
-    <strong>This is a local daemon RPC, not a public REST service.</strong>
+    <strong>This is a private daemon RPC, not a public REST service.</strong>
     Every operation is an HTTP <code>POST</code> under
     <code>/hovel.daemon.v1.DaemonService/</code>. The current daemon has no
     public authentication scheme or HTTPS listener. Do not expose it through a
@@ -27,8 +27,8 @@
                          |
                          | HTTP POST + JSON
                          v
-       owner-only Unix socket       loopback TCP
-       inventory + privileged calls status + public capabilities
+       owner Unix socket       TCP read-only       TCP insecure-full
+       full route set          public reads        full route set + acknowledgement
                          |
                          v
                   hoveld application API
@@ -59,13 +59,14 @@
 
   <div class="callout warning" role="note">
     <strong>A browser is not a direct privileged daemon client.</strong>
-    Browsers cannot open the owner-only Unix socket, and the current daemon does
-    not implement CORS or preflight <code>OPTIONS</code> handling for cross-origin
-    loopback calls. A local web or Elixir-controlled UI therefore needs a trusted
-    same-origin backend or native sidecar that owns the Unix-socket connection,
-    authenticates its own clients, enforces CSRF and authorization policy, and
-    exposes only the operations the UI needs. Do not publish or reverse-proxy the
-    daemon listener itself.
+    Browsers cannot open an owner Unix socket, and the current daemon does not
+    implement CORS or preflight <code>OPTIONS</code> handling. A web or
+    Elixir-controlled UI therefore needs a trusted same-origin backend or native
+    sidecar. That component may use an owner Unix listener or an explicitly
+    acknowledged <code>insecure-full</code> TCP listener on a protected container
+    network, but it must authenticate its own clients, enforce CSRF and
+    authorization policy, and expose only the operations the UI needs. Do not
+    publish or reverse-proxy the daemon listener itself.
   </div>
 
   <h2>Choose the Correct Transport</h2>
@@ -84,27 +85,36 @@
         <td>Unix socket</td>
         <td>Confidential, owner-only local boundary; the daemon sets mode <code>0600</code></td>
         <td>Read methods, mutations, signing-lease control, Mesh mutations, and eligible secret responses</td>
-        <td>Use this transport for every state change or credential-bearing operation</td>
+        <td>Prefer this transport for local state changes and credential-bearing operations</td>
       </tr>
       <tr>
-        <td>Loopback TCP over HTTP</td>
-        <td>Non-sensitive reads only; only loopback hosts are accepted</td>
+        <td>TCP <code>read-only</code> over HTTP</td>
+        <td>Non-sensitive reads only; TCP may bind any configured address, but defaults to this access mode</td>
         <td><code>PKIStatus</code>, backend/profile capability discovery, and other explicitly public projections; PKI inventory, assignments, trust, revocation, credential bookkeeping, and privileged calls return <code>403 permission-denied</code></td>
-        <td>Use only for public capability discovery; reconnect through the Unix socket for inventory or mutation</td>
+        <td>Use only for public capability discovery; choose a privileged listener for inventory or mutation</td>
       </tr>
       <tr>
-        <td>HTTPS or non-loopback TCP</td>
+        <td>TCP <code>insecure-full</code> over HTTP</td>
+        <td>Full route set when both the listener and client explicitly opt in; no authentication, confidentiality, integrity, or replay protection</td>
+        <td>Same method surface as the owner Unix listener, including eligible secret responses; application approvals and export policy still apply</td>
+        <td>Use only on a separately protected container or private network and send <code>X-Hovel-Insecure-Full-Control: true</code></td>
+      </tr>
+      <tr>
+        <td>HTTPS</td>
         <td>Not implemented</td>
         <td>The endpoint parser rejects it</td>
-        <td>Build a separate authenticated adapter rather than weakening this boundary</td>
+        <td>Build a separate authenticated TLS adapter for public or cross-trust-boundary access</td>
       </tr>
     </tbody>
   </table>
 
   <p>
-    “Confidential” here means an owner-only local Unix socket, not TLS on the
-    daemon listener. Supplying <code>actorId</code> or an approval boolean does
-    not turn TCP into a privileged transport.
+    “Confidential” for an owner Unix listener comes from local filesystem
+    permissions, not TLS. An <code>insecure-full</code> TCP listener is treated as
+    privileged only because its server configuration and the client
+    acknowledgement explicitly request that behavior. Supplying
+    <code>actorId</code> or an application approval boolean is not transport
+    authentication and does not make plaintext TCP safe.
   </p>
 
   <h3>Wire rules</h3>
@@ -261,8 +271,8 @@
     <thead>
       <tr>
         <th>Purpose</th>
-        <th>Non-sensitive loopback reads</th>
-        <th>Owner Unix-socket methods</th>
+        <th>Non-sensitive read-only TCP methods</th>
+        <th>Privileged transport methods</th>
       </tr>
     </thead>
     <tbody>
@@ -502,7 +512,8 @@ Content-Type: application/json
 }</code></pre>
 
   <p>
-    A private response is possible only through the Unix socket, for an active
+    A private response is possible only through an owner Unix listener or an
+    explicitly acknowledged <code>insecure-full</code> TCP listener, for an active
     generation whose purpose matches and whose export policy is
     <code>explicit-private-export</code>. The route sends
     <code>Cache-Control: no-store</code> on success and failure, including when
@@ -651,7 +662,7 @@ Content-Type: application/json
     A crash may leave a publication <code>pending</code> in phase
     <code>planned</code>, <code>signing</code>, or <code>signed</code>. Wait until
     both the requested stale age and the recorded ownership lease have elapsed,
-    then reconcile through the confidential transport:
+    then reconcile through a privileged transport:
   </p>
 
   <pre data-lang="sh"><code>curl --silent --show-error \
@@ -713,7 +724,7 @@ Content-Type: application/json
     </thead>
     <tbody>
       <tr><td>404</td><td><code>not-found</code></td><td>Refresh inventory; do not invent or parse an ID from the message</td></tr>
-      <tr><td>403</td><td><code>permission-denied</code></td><td>Reconnect through the Unix socket; repeating on TCP cannot succeed</td></tr>
+      <tr><td>403</td><td><code>permission-denied</code></td><td>Use an owner Unix listener or a server-configured <code>insecure-full</code> TCP listener with explicit client acknowledgement; do not blindly retry</td></tr>
       <tr><td>403</td><td><code>private-key-export-denied</code></td><td>Stop automatic retry and require an explicit operator decision</td></tr>
       <tr><td>403</td><td><code>authority-signing-lease-owned</code></td><td>Do not replace or revoke another actor or operation's live lease; wait for expiry or coordinate with that owner</td></tr>
       <tr><td>423</td><td><code>authority-signing-locked</code></td><td>Acquire an explicitly approved signing lease for the same actor and operation, then retry the unchanged idempotent request</td></tr>
@@ -749,8 +760,9 @@ Content-Type: application/json
 
   <pre data-lang="text"><code>call(method, request, call_class):
   1. Choose transport:
-       public status/capability method                        -&gt; Unix socket or loopback TCP
-       inventory, bookkeeping, mutation, or secret-bearing   -&gt; owner-only Unix socket
+       public status/capability method                        -&gt; Unix socket or read-only TCP
+       inventory, bookkeeping, mutation, or secret-bearing   -&gt; owner Unix socket, or protected-network
+                                                                  insecure-full TCP with client acknowledgement
   2. Validate the request against OpenAPI; emit exact field names and one JSON value.
   3. For a journaled PKI mutation, allocate an idempotency key before the first send
      and retain method + actor + exact request + key + relevant resource revisions.

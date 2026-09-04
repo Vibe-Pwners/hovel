@@ -114,6 +114,22 @@ aspect hovel status
 aspect hovel init</code></pre>
         <p><code>aspect hovel cli</code> launches <code>hovel cli</code> and auto-starts or attaches to a local daemon for the workspace. The daemon owns module processes, throw plans, confirmation records, artifacts, installed payload inventory, logs, and sessions.</p>
 
+        <h2>Connect Across Containers</h2>
+        <p>Run the daemon explicitly when the Hovel front end and workspace engine live in separate containers. The daemon may keep its workspace in a mounted volume while clients connect using the service name on a protected container network:</p>
+<pre data-lang="shell"><code># Daemon container. The advertised endpoint must be dialable by clients.
+hovel daemon serve --workspace /srv/hovel \
+  --listen tcp://0.0.0.0:9090 \
+  --advertise tcp://0.0.0.0:9090=tcp://hoveld:9090 \
+  --allow-insecure-tcp
+
+# CLI container.
+hovel --daemon-endpoint tcp://hoveld:9090 \
+  --allow-insecure-daemon \
+  cli --workspace /client-state
+</code></pre>
+        <p>TCP is <code>read-only</code> unless the server explicitly selects <code>insecure-full</code>. The <code>--allow-insecure-tcp</code> shortcut does that for every TCP listener; the client must separately acknowledge it with <code>--allow-insecure-daemon</code>. This mode is plaintext and unauthenticated. The acknowledgements prevent accidental use but provide no network security, so never publish the port or put it behind a public reverse proxy. Use container firewalling or an otherwise isolated private network.</p>
+        <p>For persistent deployments, configure individual <code>daemon.listeners</code> and <code>daemon.client</code> entries instead of repeating flags. The complete YAML and environment forms, precedence rules, multi-listener behavior, wildcard and ephemeral-port advertisement rules, and security model are in <a href="daemon-rpc.html#transport">Daemon RPC Transport</a>.</p>
+
         <div class="demo-series">
           <figure class="demo-figure">
             <img src="../assets/demos/mock-survey-exploit-cli-02-session-io.gif" alt="Hovel CLI demo listing, reading, sending to, and reading from a mock shell session.">

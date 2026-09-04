@@ -4,7 +4,7 @@
     "title": "Hovel Daemon RPC",
     "version": "v1",
     "summary": "Stable HTTP/JSON contract between hoveld and Hovel front ends.",
-    "description": "The Hovel daemon RPC is the stable local service contract used by the CLI, MCP adapter, one-shot execution, and future front ends. It is transported as HTTP POST with JSON request and response bodies over the daemon listener."
+    "description": "The Hovel daemon RPC is the stable service contract used by the CLI, MCP adapter, one-shot execution, and future front ends. It is transported as HTTP POST with JSON request and response bodies over configured Unix or TCP listeners. TCP defaults to read-only. An insecure-full TCP listener exposes privileged routes only when the client also sends X-Hovel-Insecure-Full-Control: true; that acknowledgement is not authentication or encryption."
   },
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "x-hovel-stability": "stable",
